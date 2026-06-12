@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% block title %}{{ alert.ticker or 'Alert' }} — GKTrader{% endblock %}
+
+{% block extra_css %}
+.breadcrumb { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; font-family: var(--font-mono); }
+.breadcrumb a { color: var(--watch); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.alert-header { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+.header-accent { height: 4px; }
+.header-accent.tradeable { background: var(--tradeable); }
+.header-accent.review    { background: var(--review); }
+.header-accent.avoid     { background: var(--avoid); }
+.header-accent.watch     { background: var(--watch); }
+.header-accent.ignore    { background: var(--ignore); }
+.header-body { padding: 18px 20px; display: flex; align-items: flex-start; gap: 14px; }
+.dir-icon { font-size: 28px; line-height: 1; }
+.header-info { flex: 1; }
+.ticker-row { display: flex; align-items: center; gap: 10px; margin-bottom: 3px; }
+.big-ticker { font-family: var(--font-mono); font-weight: 900; font-size: 24px; }
+.company-name { font-size: 13px; color: var(--text-muted); margin-bottom: 4px; }
+.event-line { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); }
+.header-meta { text-align: right; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); line-height: 1.7; flex-shrink: 0; }
+.score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
+.score-cell { background: var(--surface); padding: 11px 16px; }
+.score-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+.score-val { font-family: var(--font-mono); font-size: 15px; font-weight: 700; }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.section-header { padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); display: flex; align-items: center; gap: 8px; }
+.section-icon { font-size: 14px; }
+.section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.section-body { padding: 14px 16px; }
+.rationale-text { font-size: 13px; color: var(--text); line-height: 1.65; }
+.evidence-item { background: var(--surface-2); border: 1px solid var(--border-muted); border-left: 3px solid var(--tradeable); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); line-height: 1.55; font-style: italic; }
+.evidence-item:last-child { margin-bottom: 0; }
+.risk-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); }
+.risk-bullet { color: var(--avoid); font-weight: 700; }
+.market-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.market-stat .market-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
+.market-stat .market-val { font-family: var(--font-mono); font-size: 16px; font-weight: 700; }
+.action-section { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
+.action-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.action-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; font-family: var(--font-mono); }
+.action-form-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.action-form-row label { font-size: 11px; color: var(--text-muted); width: 90px; flex-shrink: 0; font-family: var(--font-mono); }
+.action-form-row input { flex: 1; }
+.action-buttons { display: flex; gap: 8px; margin-top: 12px; }
+.action-buttons .btn { flex: 1; text-align: center; }
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb"><a href="/ui/alerts">← Alerts</a> / {{ alert.ticker or alert.id[:8] }} · {{ alert.level|upper|replace('_',' ') }}</div>
+
+<div class="alert-header">
+  <div class="header-accent {{ level_css.get(alert.level|upper, 'ignore') }}"></div>
+  <div class="header-body">
+    <div class="dir-icon">{% if alert.direction == 'bullish' %}🚀{% elif alert.direction == 'bearish' %}🔴{% else %}⚪{% endif %}</div>
+    <div class="header-info">
+      <div class="ticker-row">
+        <span class="big-ticker {% if alert.direction == 'bullish' %}bull{% elif alert.direction == 'bearish' %}bear{% endif %}">
+          {% if alert.ticker %}${{ alert.ticker }}{% else %}—{% endif %}
+        </span>
+        <span class="badge {{ level_css.get(alert.level|upper, 'ignore') }}">{{ alert.level|upper|replace('_',' ') }}</span>
+      </div>
+      {% if alert.company %}<div class="company-name">{{ alert.company }}</div>{% endif %}
+      <div class="event-line">{{ alert.event_type|replace('_',' ') }} · {{ alert.direction }} · {{ alert.age }}</div>
+    </div>
+    <div class="header-meta">
+      ID: {{ alert.id[:8] }}<br>
+      FP: {{ alert.fingerprint[:16] if alert.fingerprint else '—' }}<br>
+      {{ alert.created_at.strftime('%Y-%m-%d %H:%M UTC') if alert.created_at else '—' }}
+    </div>
+  </div>
+  <div class="score-row">
+    <div class="score-cell">
+      <div class="score-label">Catalyst Score</div>
+      <div class="score-dots" style="margin-bottom:4px">
+        {% for i in range(5) %}<div class="sdot {% if i < alert.catalyst_score %}on{% else %}off{% endif %}" style="width:9px;height:9px"></div>{% endfor %}
+      </div>
+      <div class="score-val green">{{ alert.catalyst_score }} / 5</div>
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Classifier Conf.</div>
+      <div class="score-val {% if alert.classifier_confidence >= 0.8 %}green{% elif alert.classifier_confidence >= 0.6 %}amber{% else %}red{% endif %}">
+        {{ "%.0f%%"|format(alert.classifier_confidence * 100) }}
+      </div>
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Action Status</div>
+      <div class="score-val" style="font-size:12px;color:var(--text-muted)">{{ alert.action_status or '—' }}</div>
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Direction</div>
+      <div class="score-val {% if alert.direction == 'bullish' %}green{% elif alert.direction == 'bearish' %}red{% else %}" style="color:var(--text-muted){% endif %}">
+        {{ alert.direction|upper }}
+      </div>
+    </div>
+  </div>
+</div>
+
+{% if alert.rationale %}
+<div class="section">
+  <div class="section-header"><span class="section-icon">📝</span><span class="section-title">Rationale</span></div>
+  <div class="section-body"><div class="rationale-text">{{ alert.rationale }}</div></div>
+</div>
+{% endif %}
+
+{% if alert.evidence %}
+<div class="section">
+  <div class="section-header"><span class="section-icon">📋</span><span class="section-title">Evidence ({{ alert.evidence|length }} snippet{% if alert.evidence|length != 1 %}s{% endif %})</span></div>
+  <div class="section-body">
+    {% for ev in alert.evidence %}
+    <div class="evidence-item">"{{ ev.text }}" <span style="color:var(--text-dim);font-size:10px">({{ ev.start }}–{{ ev.end }})</span></div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if alert.risks %}
+<div class="section">
+  <div class="section-header"><span class="section-icon">⚠️</span><span class="section-title">Risks</span></div>
+  <div class="section-body">
+    {% for risk in alert.risks %}
+    <div class="risk-item"><span class="risk-bullet">•</span><span>{{ risk }}</span></div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if alert.market %}
+<div class="section">
+  <div class="section-header"><span class="section-icon">📈</span><span class="section-title">Market Context — IEX Partial-Market Data</span></div>
+  <div class="section-body">
+    <div class="market-grid">
+      <div class="market-stat">
+        <div class="market-label">Price</div>
+        <div class="market-val">${{ "%.2f"|format(alert.market.price) if alert.market.price else '—' }}</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Prev Close</div>
+        <div class="market-val">${{ "%.2f"|format(alert.market.previous_close) if alert.market.previous_close else '—' }}</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Intraday Move</div>
+        <div class="market-val {% if alert.market.intraday_move_pct and alert.market.intraday_move_pct > 0 %}green{% elif alert.market.intraday_move_pct %}red{% endif %}">
+          {{ "%+.2f%%"|format(alert.market.intraday_move_pct) if alert.market.intraday_move_pct is not none else '—' }}
+        </div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Volume</div>
+        <div class="market-val" style="font-size:13px">{{ "{:,}".format(alert.market.volume) if alert.market.volume else '—' }}</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Market Status</div>
+        <div class="market-val {% if alert.market.market_status == 'open' %}green{% else %}" style="color:var(--text-muted){% endif %}" style="font-size:13px">
+          {{ alert.market.market_status|upper }}
+        </div>
+      </div>
+      {% if alert.market.quality_flags %}
+      <div class="market-stat">
+        <div class="market-label">Quality Flags</div>
+        <div style="font-size:11px;color:var(--text-dim);font-family:var(--font-mono)">{{ alert.market.quality_flags|join(', ') }}</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endif %}
+
+<div class="action-section">
+  <!-- Bullish / BUY action -->
+  {% if alert.direction in ('bullish', 'unclear') %}
+  <div class="action-card">
+    <div class="action-title">Record Trade</div>
+    <form hx-post="/ui/alerts/{{ alert.id }}/decision" hx-target=".buy-result" hx-swap="innerHTML">
+      <div class="action-form-row">
+        <label>Amount EUR</label>
+        <input type="number" name="amount_eur" value="{{ level_notional.get(alert.level|upper, 0) }}" min="0" step="50">
+      </div>
+      <div class="action-form-row">
+        <label>Exec. Price $</label>
+        <input type="number" name="execution_price" placeholder="optional" step="0.01">
+      </div>
+      <input type="hidden" name="decision" value="bought">
+      <div class="action-buttons">
+        <button type="submit" class="btn btn-buy">BUY</button>
+      </div>
+    </form>
+    <div class="buy-result" style="margin-top:8px"></div>
+  </div>
+  <div class="action-card">
+    <div class="action-title">Skip / Snooze</div>
+    <form hx-post="/ui/alerts/{{ alert.id }}/decision" hx-target=".skip-result" hx-swap="innerHTML">
+      <input type="hidden" name="decision" value="no_trade">
+      <div class="action-buttons"><button type="submit" class="btn btn-skip">SKIP</button></div>
+    </form>
+    <div style="margin-top:10px">
+      <form hx-post="/ui/alerts/{{ alert.id }}/snooze" hx-target=".snooze-result" hx-swap="innerHTML">
+        <div class="action-form-row">
+          <label>Minutes</label>
+          <select name="minutes">
+            <option value="30">30 min</option>
+            <option value="60">1 hour</option>
+            <option value="120">2 hours</option>
+          </select>
+        </div>
+        <div class="action-buttons"><button type="submit" class="btn btn-snooze">SNOOZE</button></div>
+      </form>
+    </div>
+    <div class="skip-result" style="margin-top:8px"></div>
+    <div class="snooze-result" style="margin-top:4px"></div>
+  </div>
+  {% else %}
+  <!-- Bearish actions -->
+  <div class="action-card">
+    <div class="action-title">Reduce / Short</div>
+    <form hx-post="/ui/alerts/{{ alert.id }}/decision" hx-target=".bear-result" hx-swap="innerHTML">
+      <div class="action-form-row">
+        <label>Amount EUR</label>
+        <input type="number" name="amount_eur" value="{{ level_notional.get(alert.level|upper, 0) }}" min="0" step="50">
+      </div>
+      <input type="hidden" name="decision" value="sold_reduced">
+      <div class="action-buttons">
+        <button type="submit" class="btn btn-reduce">REDUCE</button>
+      </div>
+    </form>
+    <div class="bear-result" style="margin-top:8px"></div>
+  </div>
+  <div class="action-card">
+    <div class="action-title">Skip / Snooze</div>
+    <form hx-post="/ui/alerts/{{ alert.id }}/decision" hx-target=".skip-result2" hx-swap="innerHTML">
+      <input type="hidden" name="decision" value="no_trade">
+      <div class="action-buttons"><button type="submit" class="btn btn-skip">SKIP</button></div>
+    </form>
+    <form hx-post="/ui/alerts/{{ alert.id }}/snooze" hx-target=".snooze-result2" hx-swap="innerHTML" style="margin-top:10px">
+      <div class="action-form-row">
+        <label>Minutes</label>
+        <select name="minutes"><option value="30">30 min</option><option value="60">1 hour</option></select>
+      </div>
+      <div class="action-buttons"><button type="submit" class="btn btn-snooze">SNOOZE</button></div>
+    </form>
+    <div class="skip-result2" style="margin-top:8px"></div>
+    <div class="snooze-result2" style="margin-top:4px"></div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

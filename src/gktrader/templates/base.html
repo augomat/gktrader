@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{% block title %}GKTrader{% endblock %}</title>
+<script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js"></script>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+  --border: #21262d; --border-muted: #30363d;
+  --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+  --tradeable: #3fb950; --tradeable-bg: #0d2d17;
+  --review: #e3b341; --review-bg: #272115;
+  --watch: #388bfd; --watch-bg: #0c1f3b;
+  --avoid: #db6d28; --avoid-bg: #2d1a0e;
+  --ignore: #6e7681;
+  --bullish: #3fb950; --bearish: #f85149;
+  --tier1: #79c0ff; --tier2: #d2a8ff;
+  --font-mono: 'SFMono-Regular','Cascadia Code','Consolas',monospace;
+}
+body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; min-height: 100vh; }
+
+/* Topbar */
+.topbar { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; height: 48px; position: sticky; top: 0; z-index: 100; }
+.topbar-logo { font-family: var(--font-mono); font-weight: 700; font-size: 15px; letter-spacing: .04em; color: var(--text); text-decoration: none; }
+.topbar-logo span { color: var(--tradeable); }
+.topbar-nav { display: flex; gap: 2px; margin-left: 24px; }
+.nav-link { background: none; border: none; color: var(--text-muted); padding: 5px 12px; border-radius: 6px; font-size: 13px; cursor: pointer; text-decoration: none; display: inline-block; }
+.nav-link:hover { background: var(--surface-2); color: var(--text); }
+.nav-link.active { color: var(--text); background: var(--surface-2); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 12px; }
+.status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tradeable); box-shadow: 0 0 6px var(--tradeable); }
+.logout-link { font-size: 12px; color: var(--text-dim); text-decoration: none; }
+.logout-link:hover { color: var(--text-muted); }
+
+/* Layout */
+.content { padding: 20px; max-width: 1280px; }
+
+/* Panels */
+.panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+.panel-title { font-size: 13px; font-weight: 600; color: var(--text); }
+.panel-link { font-size: 12px; color: var(--watch); text-decoration: none; }
+.panel-link:hover { text-decoration: underline; }
+
+/* KPI cards */
+.kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+.kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 6px; }
+.kpi-value { font-family: var(--font-mono); font-size: 26px; font-weight: 600; }
+.kpi-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+.green { color: var(--tradeable); }
+.amber { color: var(--review); }
+.blue { color: var(--watch); }
+.red { color: var(--bearish); }
+
+/* Badges */
+.badge { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 6px; border-radius: 4px; letter-spacing: .04em; white-space: nowrap; }
+.badge.tradeable { background: var(--tradeable-bg); color: var(--tradeable); border: 1px solid rgba(63,185,80,.4); }
+.badge.review    { background: var(--review-bg);    color: var(--review);    border: 1px solid rgba(227,179,65,.4); }
+.badge.watch     { background: var(--watch-bg);     color: var(--watch);     border: 1px solid rgba(56,139,253,.4); }
+.badge.avoid     { background: var(--avoid-bg);     color: var(--avoid);     border: 1px solid rgba(219,109,40,.4); }
+.badge.ignore    { background: #0d1117; color: var(--ignore); border: 1px solid rgba(110,118,129,.3); }
+
+.tier-badge { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 1px 5px; border-radius: 3px; }
+.tier-badge.t1 { background: rgba(121,192,255,.15); color: var(--tier1); }
+.tier-badge.t2 { background: rgba(210,168,255,.12); color: var(--tier2); }
+
+.status-badge { font-size: 11px; font-family: var(--font-mono); font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+.status-badge.ok       { color: var(--tradeable); background: var(--tradeable-bg); }
+.status-badge.degraded { color: var(--review); background: var(--review-bg); }
+.status-badge.failed   { color: var(--bearish); background: rgba(248,81,73,.12); }
+.status-badge.started  { color: var(--watch); background: var(--watch-bg); }
+.status-badge.unknown  { color: var(--text-dim); background: var(--surface-2); }
+
+/* Ticker */
+.ticker { font-family: var(--font-mono); font-weight: 800; }
+.ticker.bull { color: var(--bullish); }
+.ticker.bear { color: var(--bearish); }
+
+/* Score dots */
+.score-dots { display: flex; gap: 2px; align-items: center; }
+.sdot { width: 6px; height: 6px; border-radius: 50%; }
+.sdot.on { background: var(--tradeable); }
+.sdot.off { background: var(--border-muted); }
+
+/* Buttons */
+.btn { padding: 8px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; font-family: var(--font-mono); cursor: pointer; border: 1px solid; transition: opacity .15s; }
+.btn-buy    { background: rgba(63,185,80,.15); color: var(--tradeable); border-color: rgba(63,185,80,.4); }
+.btn-skip   { background: rgba(139,148,158,.1); color: var(--text-muted); border-color: var(--border-muted); }
+.btn-snooze { background: rgba(56,139,253,.1); color: var(--watch); border-color: rgba(56,139,253,.3); }
+.btn-reduce { background: rgba(248,81,73,.15); color: var(--bearish); border-color: rgba(248,81,73,.4); }
+.btn-hedge  { background: rgba(219,109,40,.12); color: var(--avoid); border-color: rgba(219,109,40,.3); }
+.btn-primary { background: rgba(63,185,80,.15); color: var(--tradeable); border: 1px solid rgba(63,185,80,.4); padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer; font-family: var(--font-mono); }
+.btn:hover, .btn-primary:hover { opacity: .8; }
+
+/* Form elements */
+input[type="text"], input[type="password"], input[type="number"], select {
+  background: var(--surface-2); border: 1px solid var(--border-muted); color: var(--text);
+  padding: 7px 10px; border-radius: 6px; font-size: 13px; font-family: var(--font-mono);
+}
+input:focus, select:focus { outline: 2px solid rgba(56,139,253,.4); border-color: var(--watch); }
+
+/* Decision/snooze feedback */
+.decision-recorded { font-family: var(--font-mono); font-size: 12px; color: var(--tradeable); padding: 6px 10px; background: var(--tradeable-bg); border-radius: 5px; border: 1px solid rgba(63,185,80,.3); }
+.snooze-done { font-family: var(--font-mono); font-size: 12px; color: var(--watch); }
+
+/* HTMX loading indicator */
+.htmx-indicator { opacity: 0; transition: opacity .2s; }
+.htmx-request .htmx-indicator { opacity: 1; }
+
+{% block extra_css %}{% endblock %}
+</style>
+</head>
+<body>
+<nav class="topbar">
+  <a href="/ui/dashboard" class="topbar-logo">GK<span>TRADER</span></a>
+  <div class="topbar-nav">
+    <a href="/ui/dashboard" class="nav-link {% if page == 'dashboard' %}active{% endif %}">Dashboard</a>
+    <a href="/ui/alerts" class="nav-link {% if page == 'alerts' %}active{% endif %}">Alerts</a>
+    <a href="/ui/positions" class="nav-link {% if page == 'positions' %}active{% endif %}">Positions</a>
+    <a href="/ui/performance" class="nav-link {% if page == 'performance' %}active{% endif %}">Performance</a>
+    <a href="/ui/pipeline" class="nav-link {% if page == 'pipeline' %}active{% endif %}">Pipeline</a>
+  </div>
+  <div class="topbar-right">
+    <div class="status-dot" title="System online"></div>
+    <a href="/ui/logout" class="logout-link">Logout</a>
+  </div>
+</nav>
+<div class="content">
+  {% block content %}{% endblock %}
+</div>
+</body>
+</html>

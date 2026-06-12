@@ -1,0 +1,1 @@
+{"version":3,"file":"company-history.d.ts","sourceRoot":"","sources":["../../src/tools/company-history.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,wBAAwB,EAAE,MAAM,kBAAkB,CAAC;AACjE,OAAO,EAAE,oBAAoB,EAAE,MAAM,eAAe,CAAC;AAGrD,eAAO,MAAM,kBAAkB,EAAE,wBAAwB,CACvD;IAAE,UAAU,EAAE,MAAM,CAAC;IAAC,YAAY,EAAE,MAAM,CAAA;CAAE,EAC5C,OAAO,oBAAoB,CAmB5B,CAAC"}

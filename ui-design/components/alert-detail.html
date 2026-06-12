@@ -1,0 +1,253 @@
+<!-- @dsCard group="Alerts" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Alert Detail</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+    --border: #21262d; --border-muted: #30363d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+    --tradeable: #3fb950; --tradeable-bg: #0d2d17;
+    --review: #e3b341; --review-bg: #272115;
+    --watch: #388bfd; --avoid: #db6d28;
+    --bullish: #3fb950; --bearish: #f85149;
+    --font-mono: 'SFMono-Regular', 'Cascadia Code', 'Consolas', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 24px; max-width: 800px; }
+
+  /* Breadcrumb */
+  .breadcrumb { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; font-family: var(--font-mono); }
+  .breadcrumb a { color: var(--watch); cursor: pointer; }
+  .breadcrumb a:hover { text-decoration: underline; }
+
+  /* Header */
+  .alert-header { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 16px; }
+  .header-accent { height: 4px; background: var(--tradeable); }
+  .header-body { padding: 20px; }
+  .header-top { display: flex; align-items: flex-start; gap: 16px; }
+  .dir-icon { font-size: 32px; line-height: 1; }
+  .header-info { flex: 1; }
+  .header-ticker-row { display: flex; align-items: center; gap: 10px; margin-bottom: 4px; }
+  .big-ticker { font-family: var(--font-mono); font-weight: 900; font-size: 26px; color: var(--bullish); }
+  .level-badge { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 5px; background: var(--tradeable-bg); color: var(--tradeable); border: 1px solid rgba(63,185,80,.4); }
+  .company-name { font-size: 14px; color: var(--text-muted); margin-bottom: 6px; }
+  .event-line { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); }
+  .header-time { text-align: right; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); line-height: 1.6; }
+
+  /* Score row */
+  .score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
+  .score-cell { background: var(--surface); padding: 12px 16px; }
+  .score-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+  .score-val { font-family: var(--font-mono); font-size: 15px; font-weight: 700; }
+  .score-dots { display: flex; gap: 3px; align-items: center; margin-top: 2px; }
+  .sdot { width: 8px; height: 8px; border-radius: 50%; }
+  .sdot.on { background: var(--tradeable); }
+  .sdot.off { background: var(--border-muted); }
+
+  /* Sections */
+  .section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+  .section-header { padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); display: flex; align-items: center; gap: 8px; }
+  .section-icon { font-size: 14px; }
+  .section-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+  .section-body { padding: 14px 16px; }
+
+  .rationale-text { font-size: 13px; color: var(--text); line-height: 1.65; }
+
+  .evidence-item { background: var(--surface-2); border: 1px solid var(--border-muted); border-left: 3px solid var(--tradeable); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); line-height: 1.55; font-style: italic; }
+  .evidence-item:last-child { margin-bottom: 0; }
+
+  .risk-item { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-size: 12px; color: var(--text-muted); }
+  .risk-item:last-child { margin-bottom: 0; }
+  .risk-bullet { color: var(--avoid); font-weight: 700; }
+
+  /* Market context */
+  .market-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .market-stat { }
+  .market-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
+  .market-val { font-family: var(--font-mono); font-size: 16px; font-weight: 700; }
+  .market-val.price { color: var(--text); }
+  .market-val.pos { color: var(--bullish); }
+  .market-val.neg { color: var(--bearish); }
+  .market-sub { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-top: 2px; }
+
+  /* Prior signals */
+  .signal-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+  .signal-row:last-child { border-bottom: none; padding-bottom: 0; }
+  .signal-date { font-family: var(--font-mono); color: var(--text-dim); width: 90px; flex-shrink: 0; }
+  .signal-type { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); flex: 1; }
+  .signal-level { font-family: var(--font-mono); font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 3px; background: rgba(63,185,80,.1); color: var(--tradeable); }
+
+  /* Modifiers list */
+  .modifier-item { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; font-size: 12px; font-family: var(--font-mono); }
+  .modifier-item:last-child { margin-bottom: 0; }
+  .mod-delta { font-weight: 700; width: 28px; }
+  .mod-delta.pos { color: var(--bullish); }
+  .mod-delta.neg { color: var(--bearish); }
+  .mod-reason { color: var(--text-muted); }
+
+  /* Action buttons */
+  .action-bar { display: flex; gap: 10px; margin-top: 20px; }
+  .btn { flex: 1; padding: 12px 0; border-radius: 7px; font-size: 13px; font-weight: 700; font-family: var(--font-mono); cursor: pointer; border: 1px solid; transition: opacity .15s; }
+  .btn-buy    { background: rgba(63,185,80,.2); color: var(--tradeable); border-color: rgba(63,185,80,.5); }
+  .btn-skip   { background: rgba(139,148,158,.1); color: var(--text-muted); border-color: var(--border-muted); }
+  .btn-snooze { background: rgba(56,139,253,.1); color: var(--watch); border-color: rgba(56,139,253,.3); }
+</style>
+</head>
+<body>
+
+<div class="breadcrumb"><a>← Alerts</a> / NVDA · TRADEABLE · government_contract</div>
+
+<!-- Alert header -->
+<div class="alert-header">
+  <div class="header-accent"></div>
+  <div class="header-body">
+    <div class="header-top">
+      <div class="dir-icon">🚀</div>
+      <div class="header-info">
+        <div class="header-ticker-row">
+          <span class="big-ticker">$NVDA</span>
+          <span class="level-badge">TRADEABLE</span>
+        </div>
+        <div class="company-name">Nvidia Corporation</div>
+        <div class="event-line">government_contract · bullish · Tier 1 source · latency 45s</div>
+      </div>
+      <div class="header-time">
+        Published: 2026-06-12 14:22 UTC<br>
+        Detected: 2026-06-12 14:23 UTC<br>
+        Alert ID: a1b2c3d4<br>
+        Fingerprint: nvda:gc:bull:t1
+      </div>
+    </div>
+  </div>
+  <div class="score-row">
+    <div class="score-cell">
+      <div class="score-label">Catalyst Score</div>
+      <div class="score-dots"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div></div>
+      <div class="score-val" style="color:var(--tradeable)">5 / 5</div>
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Classifier Conf.</div>
+      <div class="score-val" style="color:var(--tradeable)">96%</div>
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Mapping Conf.</div>
+      <div class="score-val" style="color:var(--tradeable)">98%</div>
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Source Tier</div>
+      <div class="score-val" style="color:#79c0ff">TIER 1</div>
+    </div>
+  </div>
+</div>
+
+<!-- Score breakdown -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">📊</span><span class="section-title">Score Breakdown</span></div>
+  <div class="section-body">
+    <div class="modifier-item"><span class="mod-delta pos">+5</span><span class="mod-reason">Base: government_contract (score 5)</span></div>
+    <div class="modifier-item"><span class="mod-delta pos">+1</span><span class="mod-reason">Official confirmation with concrete details</span></div>
+    <div class="modifier-item"><span class="mod-delta pos">+1</span><span class="mod-reason">Multiple independent sources</span></div>
+    <div style="height:8px"></div>
+    <div class="modifier-item" style="border-top:1px solid var(--border);padding-top:8px"><span class="mod-delta pos" style="font-size:14px">7→5</span><span class="mod-reason" style="color:var(--text)">Final score capped at 5</span></div>
+  </div>
+</div>
+
+<!-- Rationale -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">📝</span><span class="section-title">Rationale</span></div>
+  <div class="section-body">
+    <div class="rationale-text">DoD awarded Nvidia a $600M contract for AI inference infrastructure deployment across defense computing clusters. Contract ID: DODS-2024-AI-0442. Action status: awarded. Multiple government actors confirmed: DoD, DARPA. No competing bids named. Company explicitly named as sole-source awardee. Fiscal year 2026 allocation confirmed in briefing.</div>
+  </div>
+</div>
+
+<!-- Evidence -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">📋</span><span class="section-title">Evidence Snippets</span></div>
+  <div class="section-body">
+    <div class="evidence-item">"The Department of Defense has awarded Nvidia Corporation a $600 million sole-source contract for AI inference infrastructure." (offset 142–268)</div>
+    <div class="evidence-item">"Contract DODS-2024-AI-0442 covers deployment across DARPA and DoD cloud computing facilities through FY2026." (offset 312–441)</div>
+  </div>
+</div>
+
+<!-- Risks -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">⚠️</span><span class="section-title">Risks</span></div>
+  <div class="section-body">
+    <div class="risk-item"><span class="risk-bullet">•</span><span>Contract may be subject to congressional appropriations approval — not yet signed into law.</span></div>
+    <div class="risk-item"><span class="risk-bullet">•</span><span>Competing bids from AMD or Intel not explicitly ruled out; sole-source basis not confirmed in 8-K.</span></div>
+    <div class="risk-item"><span class="risk-bullet">•</span><span>Pre-market price already up +3.8% intraday — some discovery may be priced in.</span></div>
+  </div>
+</div>
+
+<!-- Market context -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">📈</span><span class="section-title">Market Context — IEX Partial-Market Data</span></div>
+  <div class="section-body">
+    <div class="market-grid">
+      <div class="market-stat">
+        <div class="market-label">Price</div>
+        <div class="market-val price">$875.40</div>
+        <div class="market-sub">via Alpaca IEX</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Prev Close</div>
+        <div class="market-val price">$843.20</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Intraday Move</div>
+        <div class="market-val pos">+3.8%</div>
+        <div class="market-sub">below 10% — TRADEABLE retained</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Volume</div>
+        <div class="market-val price">42.1M</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Market Status</div>
+        <div class="market-val" style="color:var(--tradeable)">OPEN</div>
+      </div>
+      <div class="market-stat">
+        <div class="market-label">Data Quality</div>
+        <div class="market-val" style="font-size:12px;color:var(--text-muted)">IEX partial</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Prior bullish signals -->
+<div class="section">
+  <div class="section-header"><span class="section-icon">🕐</span><span class="section-title">Company Signal History (NVDA)</span></div>
+  <div class="section-body">
+    <div class="signal-row">
+      <span class="signal-date">2026-04-11</span>
+      <span class="signal-type">presidential_positive_mention</span>
+      <span class="signal-level">REVIEW</span>
+      <span style="font-size:11px;color:var(--text-dim);margin-left:8px">President mentioned Nvidia AI chips at summit</span>
+    </div>
+    <div class="signal-row">
+      <span class="signal-date">2026-03-28</span>
+      <span class="signal-type">government_funding</span>
+      <span class="signal-level">TRADEABLE</span>
+      <span style="font-size:11px;color:var(--text-dim);margin-left:8px">CHIPS Act allocation confirmed — $200M</span>
+    </div>
+    <div class="signal-row">
+      <span class="signal-date">2026-02-14</span>
+      <span class="signal-type">regulatory_tailwind</span>
+      <span class="signal-level">WATCH</span>
+      <span style="font-size:11px;color:var(--text-dim);margin-left:8px">Export controls relaxed on consumer GPU tier</span>
+    </div>
+  </div>
+</div>
+
+<!-- Action bar -->
+<div class="action-bar">
+  <button class="btn btn-buy">BUY — Record Position</button>
+  <button class="btn btn-skip">SKIP</button>
+  <button class="btn btn-snooze">SNOOZE 30m</button>
+</div>
+
+</body>
+</html>

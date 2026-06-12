@@ -1,0 +1,26 @@
+{% for alert in alerts %}
+<a href="/ui/alerts/{{ alert.id }}" class="alert-row">
+  <div class="alert-level-bar {{ level_css.get(alert.level|upper, 'ignore') }}"></div>
+  <div class="alert-main">
+    <div class="alert-top">
+      <span class="ticker {% if alert.direction == 'bullish' %}bull{% else %}bear{% endif %}" style="font-size:15px">
+        {% if alert.ticker %}${{ alert.ticker }}{% else %}—{% endif %}
+      </span>
+      <span class="badge {{ level_css.get(alert.level|upper, 'ignore') }}">{{ alert.level|upper|replace('_',' ') }}</span>
+    </div>
+    <div class="alert-subtitle">
+      {% if alert.direction == 'bullish' %}🚀{% else %}🔴{% endif %}
+      {{ alert.direction|upper }} — {{ alert.event_type|replace('_',' ') }}
+      {% if alert.company %} · {{ alert.company }}{% endif %}
+    </div>
+    <div class="alert-meta">{{ alert.age }}</div>
+  </div>
+  <div class="score-pill">
+    <div class="score-dots">
+      {% for i in range(5) %}<div class="sdot {% if i < alert.catalyst_score %}on{% else %}off{% endif %}"></div>{% endfor %}
+    </div>
+  </div>
+</a>
+{% else %}
+<div class="empty-state" style="padding:24px;text-align:center;color:var(--text-dim);font-size:13px">No alerts yet.</div>
+{% endfor %}

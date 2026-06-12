@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Pipeline — GKTrader{% endblock %}
+
+{% block extra_css %}
+.page-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.page-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+.source-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+.src-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.src-accent { height: 3px; }
+.src-accent.succeeded { background: var(--tradeable); }
+.src-accent.degraded  { background: var(--review); }
+.src-accent.failed    { background: var(--bearish); }
+.src-accent.unknown   { background: var(--text-dim); }
+.src-body { padding: 12px 14px; }
+.src-name { font-family: var(--font-mono); font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+.src-tier-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+.enabled-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tradeable); }
+.src-stat { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; font-family: var(--font-mono); }
+.stat-key { color: var(--text-dim); }
+.stat-val { color: var(--text-muted); }
+.stat-val.ok  { color: var(--bullish); }
+.stat-val.warn { color: var(--review); }
+.stat-val.err { color: var(--bearish); }
+.src-status-bar { margin-top: 10px; font-size: 11px; font-weight: 700; font-family: var(--font-mono); padding: 3px 8px; border-radius: 4px; text-align: center; }
+.src-status-bar.succeeded { background: rgba(63,185,80,.1); color: var(--tradeable); }
+.src-status-bar.degraded  { background: rgba(227,179,65,.1); color: var(--review); }
+.src-status-bar.failed    { background: rgba(248,81,73,.1);  color: var(--bearish); }
+.src-status-bar.unknown   { background: rgba(139,148,158,.1); color: var(--text-dim); }
+.run-head { display: grid; grid-template-columns: 110px 90px 60px 50px 60px 1fr 80px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.th { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); font-family: var(--font-mono); }
+.run-row { display: grid; grid-template-columns: 110px 90px 60px 50px 60px 1fr 80px; padding: 10px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12px; transition: background .12s; }
+.run-row:last-child { border-bottom: none; }
+.run-row:hover { background: var(--surface-2); }
+.cell { font-family: var(--font-mono); color: var(--text-muted); }
+.cell.bold { color: var(--text); font-weight: 600; }
+.cell.green { color: var(--bullish); }
+.cell.red   { color: var(--bearish); }
+.proc-head { display: grid; grid-template-columns: 90px 1fr 70px 70px 90px 90px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.proc-row { display: grid; grid-template-columns: 90px 1fr 70px 70px 90px 90px; padding: 9px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12px; }
+.proc-row:last-child { border-bottom: none; }
+.proc-status { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 6px; border-radius: 4px; }
+.proc-status.succeeded { background: rgba(63,185,80,.08); color: var(--tradeable); }
+.proc-status.pending   { background: rgba(56,139,253,.08); color: var(--watch); }
+.proc-status.failed    { background: rgba(248,81,73,.08);  color: var(--bearish); }
+.proc-status.invalid   { background: rgba(139,148,158,.08); color: var(--text-dim); }
+{% endblock %}
+
+{% block content %}
+<div class="page-title">Pipeline Monitor</div>
+<div class="page-sub">Source health · poll run log · processing queue</div>
+
+<div class="source-cards"
+     id="source-health"
+     hx-get="/ui/partials/pipeline-health"
+     hx-trigger="every 60s"
+     hx-swap="innerHTML">
+  {% include "partials/pipeline_health.html" %}
+</div>
+
+<div class="panel" style="margin-bottom:16px">
+  <div class="panel-header"><span class="panel-title">Recent Poll Runs</span></div>
+  <div class="run-head">
+    <div class="th">Source</div>
+    <div class="th">Started</div>
+    <div class="th">Fetched</div>
+    <div class="th">New</div>
+    <div class="th">Errors</div>
+    <div class="th">Path</div>
+    <div class="th">Status</div>
+  </div>
+  {% if poll_runs %}
+  {% for run in poll_runs %}
+  <div class="run-row">
+    <div class="cell bold">{{ run.source_name }}</div>
+    <div class="cell">{{ run.started_at }}</div>
+    <div class="cell {% if run.fetch_count > 0 %}green{% endif %}">{{ run.fetch_count }}</div>
+    <div class="cell {% if run.new_count > 0 %}green{% endif %}">{{ run.new_count }}</div>
+    <div class="cell {% if run.errors %}red{% endif %}">{{ run.errors|length if run.errors else 0 }}</div>
+    <div class="cell">{{ run.fetch_path }}</div>
+    <div><span class="status-badge {{ 'ok' if run.status == 'succeeded' else ('degraded' if run.status == 'degraded' else run.status) }}">{{ run.status|upper }}</span></div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div style="padding:24px;text-align:center;color:var(--text-dim);font-size:13px">No poll runs yet.</div>
+  {% endif %}
+</div>
+
+<div class="panel">
+  <div class="panel-header"><span class="panel-title">Recent Processing</span></div>
+  <div class="proc-head">
+    <div class="th">Source</div>
+    <div class="th">Title</div>
+    <div class="th">Tokens↑</div>
+    <div class="th">Tokens↓</div>
+    <div class="th">Status</div>
+    <div class="th">Age</div>
+  </div>
+  {% if processing %}
+  {% for r in processing %}
+  <div class="proc-row">
+    <div class="cell bold">{{ r.source_name }}</div>
+    <div class="cell" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text-muted)">{{ r.title }}</div>
+    <div class="cell">{{ r.tokens_in or '—' }}</div>
+    <div class="cell">{{ r.tokens_out or '—' }}</div>
+    <div><span class="proc-status {{ r.status }}">{{ r.status|upper }}</span></div>
+    <div class="cell">{{ r.age }}</div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div style="padding:24px;text-align:center;color:var(--text-dim);font-size:13px">No processing runs yet.</div>
+  {% endif %}
+</div>
+{% endblock %}

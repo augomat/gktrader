@@ -1,0 +1,1 @@
+{"version":3,"file":"record-position-event.d.ts","sourceRoot":"","sources":["../../src/tools/record-position-event.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,wBAAwB,EAAE,MAAM,kBAAkB,CAAC;AACjE,OAAO,EAAE,yBAAyB,EAAE,MAAM,eAAe,CAAC;AAG1D,eAAO,MAAM,uBAAuB,EAAE,wBAAwB,CAC5D;IAAE,UAAU,EAAE,MAAM,CAAC;IAAC,YAAY,EAAE,MAAM,CAAA;CAAE,EAC5C,OAAO,yBAAyB,CA6BjC,CAAC"}

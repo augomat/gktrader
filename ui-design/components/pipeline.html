@@ -1,0 +1,301 @@
+<!-- @dsCard group="Pipeline" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Pipeline Monitor</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+    --border: #21262d; --border-muted: #30363d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+    --tradeable: #3fb950; --review: #e3b341; --watch: #388bfd; --avoid: #db6d28;
+    --bullish: #3fb950; --bearish: #f85149;
+    --tier1: #79c0ff; --tier2: #d2a8ff;
+    --font-mono: 'SFMono-Regular', 'Cascadia Code', 'Consolas', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+
+  .page-header { display: flex; align-items: center; justify-content: space-between; }
+  .page-title { font-size: 16px; font-weight: 600; }
+  .page-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Source cards row */
+  .source-cards { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .src-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .src-accent { height: 3px; }
+  .src-accent.ok   { background: var(--tradeable); }
+  .src-accent.deg  { background: var(--review); }
+  .src-accent.fail { background: var(--bearish); }
+  .src-body { padding: 12px 14px; }
+  .src-name { font-family: var(--font-mono); font-weight: 700; font-size: 13px; margin-bottom: 4px; }
+  .src-tier-row { display: flex; align-items: center; gap: 6px; margin-bottom: 10px; }
+  .tier-badge { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 1px 5px; border-radius: 3px; }
+  .tier-badge.t1 { background: rgba(121,192,255,.15); color: var(--tier1); }
+  .tier-badge.t2 { background: rgba(210,168,255,.12); color: var(--tier2); }
+  .enabled-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--tradeable); }
+  .enabled-dot.off { background: var(--text-dim); }
+  .src-stat { display: flex; justify-content: space-between; font-size: 11px; margin-bottom: 3px; }
+  .stat-key { color: var(--text-dim); font-family: var(--font-mono); }
+  .stat-val { color: var(--text-muted); font-family: var(--font-mono); }
+  .stat-val.green { color: var(--bullish); }
+  .stat-val.amber { color: var(--review); }
+  .stat-val.red   { color: var(--bearish); }
+  .src-status { margin-top: 10px; font-size: 11px; font-weight: 700; font-family: var(--font-mono); padding: 3px 8px; border-radius: 4px; text-align: center; }
+  .src-status.ok   { background: rgba(63,185,80,.1); color: var(--tradeable); }
+  .src-status.deg  { background: rgba(227,179,65,.1); color: var(--review); }
+  .src-status.fail { background: rgba(248,81,73,.1); color: var(--bearish); }
+
+  /* Poll run log */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .panel-title { font-size: 13px; font-weight: 600; }
+
+  .run-head { display: grid; grid-template-columns: 120px 100px 70px 70px 70px 1fr 100px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+  .th { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); font-family: var(--font-mono); }
+
+  .run-row { display: grid; grid-template-columns: 120px 100px 70px 70px 70px 1fr 100px; padding: 10px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12px; transition: background .12s; }
+  .run-row:last-child { border-bottom: none; }
+  .run-row:hover { background: var(--surface-2); }
+
+  .cell { font-family: var(--font-mono); color: var(--text-muted); }
+  .cell.bold { color: var(--text); font-weight: 600; }
+  .cell.green { color: var(--bullish); }
+  .cell.amber { color: var(--review); }
+  .cell.red   { color: var(--bearish); }
+
+  .run-status { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 7px; border-radius: 4px; }
+  .run-status.succeeded { background: rgba(63,185,80,.1); color: var(--tradeable); }
+  .run-status.degraded  { background: rgba(227,179,65,.1); color: var(--review); }
+  .run-status.failed    { background: rgba(248,81,73,.1); color: var(--bearish); }
+  .run-status.started   { background: rgba(56,139,253,.1); color: var(--watch); }
+
+  .errors-pill { font-size: 11px; font-family: var(--font-mono); color: var(--bearish); cursor: pointer; }
+  .errors-pill:hover { text-decoration: underline; }
+
+  /* Processing queue */
+  .queue-row { display: grid; grid-template-columns: 80px 200px 80px 80px 80px 1fr; padding: 9px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12px; }
+  .queue-row:last-child { border-bottom: none; }
+  .proc-status { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 6px; border-radius: 4px; }
+  .proc-status.succeeded { background: rgba(63,185,80,.08); color: var(--tradeable); }
+  .proc-status.pending   { background: rgba(56,139,253,.08); color: var(--watch); }
+  .proc-status.failed    { background: rgba(248,81,73,.08); color: var(--bearish); }
+  .proc-status.invalid   { background: rgba(139,148,158,.1); color: var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div>
+    <div class="page-title">Pipeline Monitor</div>
+    <div class="page-sub">5 sources · last cycle 2m ago · Celery worker online</div>
+  </div>
+</div>
+
+<!-- Source status cards -->
+<div class="source-cards">
+
+  <div class="src-card">
+    <div class="src-accent ok"></div>
+    <div class="src-body">
+      <div class="src-name">whitehouse</div>
+      <div class="src-tier-row"><span class="tier-badge t1">TIER 1</span><div class="enabled-dot"></div></div>
+      <div class="src-stat"><span class="stat-key">interval</span><span class="stat-val">60s</span></div>
+      <div class="src-stat"><span class="stat-key">last poll</span><span class="stat-val green">2m ago</span></div>
+      <div class="src-stat"><span class="stat-key">new docs</span><span class="stat-val green">12</span></div>
+      <div class="src-stat"><span class="stat-key">errors</span><span class="stat-val">0</span></div>
+      <div class="src-status ok">SUCCEEDED</div>
+    </div>
+  </div>
+
+  <div class="src-card">
+    <div class="src-accent ok"></div>
+    <div class="src-body">
+      <div class="src-name">truthsocial</div>
+      <div class="src-tier-row"><span class="tier-badge t1">TIER 1</span><div class="enabled-dot"></div></div>
+      <div class="src-stat"><span class="stat-key">interval</span><span class="stat-val">60s</span></div>
+      <div class="src-stat"><span class="stat-key">last poll</span><span class="stat-val green">3m ago</span></div>
+      <div class="src-stat"><span class="stat-key">new docs</span><span class="stat-val green">4</span></div>
+      <div class="src-stat"><span class="stat-key">browser</span><span class="stat-val green">active</span></div>
+      <div class="src-status ok">SUCCEEDED</div>
+    </div>
+  </div>
+
+  <div class="src-card">
+    <div class="src-accent ok"></div>
+    <div class="src-body">
+      <div class="src-name">nist</div>
+      <div class="src-tier-row"><span class="tier-badge t2">TIER 2</span><div class="enabled-dot"></div></div>
+      <div class="src-stat"><span class="stat-key">interval</span><span class="stat-val">120s</span></div>
+      <div class="src-stat"><span class="stat-key">last poll</span><span class="stat-val green">5m ago</span></div>
+      <div class="src-stat"><span class="stat-key">new docs</span><span class="stat-val green">7</span></div>
+      <div class="src-stat"><span class="stat-key">errors</span><span class="stat-val">0</span></div>
+      <div class="src-status ok">SUCCEEDED</div>
+    </div>
+  </div>
+
+  <div class="src-card">
+    <div class="src-accent ok"></div>
+    <div class="src-body">
+      <div class="src-name">sec_8k</div>
+      <div class="src-tier-row"><span class="tier-badge t1">TIER 1</span><div class="enabled-dot"></div></div>
+      <div class="src-stat"><span class="stat-key">interval</span><span class="stat-val">120s</span></div>
+      <div class="src-stat"><span class="stat-key">last poll</span><span class="stat-val green">4m ago</span></div>
+      <div class="src-stat"><span class="stat-key">new docs</span><span class="stat-val">0</span></div>
+      <div class="src-stat"><span class="stat-key">errors</span><span class="stat-val">0</span></div>
+      <div class="src-status ok">SUCCEEDED</div>
+    </div>
+  </div>
+
+  <div class="src-card">
+    <div class="src-accent deg"></div>
+    <div class="src-body">
+      <div class="src-name">commerce</div>
+      <div class="src-tier-row"><span class="tier-badge t2">TIER 2</span><div class="enabled-dot"></div></div>
+      <div class="src-stat"><span class="stat-key">interval</span><span class="stat-val">120s</span></div>
+      <div class="src-stat"><span class="stat-key">last poll</span><span class="stat-val amber">18m ago</span></div>
+      <div class="src-stat"><span class="stat-key">new docs</span><span class="stat-val">—</span></div>
+      <div class="src-stat"><span class="stat-key">browser</span><span class="stat-val amber">CF block</span></div>
+      <div class="src-status deg">DEGRADED</div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Recent poll runs -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Recent Poll Runs</span>
+  </div>
+  <div class="run-head">
+    <div class="th">Source</div>
+    <div class="th">Started</div>
+    <div class="th">Fetched</div>
+    <div class="th">New</div>
+    <div class="th">Errors</div>
+    <div class="th">Path</div>
+    <div class="th">Status</div>
+  </div>
+
+  <div class="run-row">
+    <div class="cell bold">whitehouse</div>
+    <div class="cell">14:38:02</div>
+    <div class="cell green">42</div>
+    <div class="cell green">12</div>
+    <div class="cell">0</div>
+    <div class="cell">press_briefings</div>
+    <div><span class="run-status succeeded">SUCCEEDED</span></div>
+  </div>
+  <div class="run-row">
+    <div class="cell bold">truthsocial</div>
+    <div class="cell">14:37:18</div>
+    <div class="cell green">20</div>
+    <div class="cell green">4</div>
+    <div class="cell">0</div>
+    <div class="cell">posts</div>
+    <div><span class="run-status succeeded">SUCCEEDED</span></div>
+  </div>
+  <div class="run-row">
+    <div class="cell bold">nist</div>
+    <div class="cell">14:35:40</div>
+    <div class="cell green">31</div>
+    <div class="cell green">7</div>
+    <div class="cell">0</div>
+    <div class="cell">awards</div>
+    <div><span class="run-status succeeded">SUCCEEDED</span></div>
+  </div>
+  <div class="run-row">
+    <div class="cell bold">sec_8k</div>
+    <div class="cell">14:36:10</div>
+    <div class="cell">8</div>
+    <div class="cell">0</div>
+    <div class="cell">0</div>
+    <div class="cell">recent_8k</div>
+    <div><span class="run-status succeeded">SUCCEEDED</span></div>
+  </div>
+  <div class="run-row">
+    <div class="cell bold">commerce</div>
+    <div class="cell">14:22:05</div>
+    <div class="cell">0</div>
+    <div class="cell">0</div>
+    <div class="cell red">3</div>
+    <div class="cell">grants</div>
+    <div><span class="run-status degraded">DEGRADED</span></div>
+  </div>
+  <div class="run-row">
+    <div class="cell bold">whitehouse</div>
+    <div class="cell">14:28:01</div>
+    <div class="cell green">38</div>
+    <div class="cell">0</div>
+    <div class="cell">0</div>
+    <div class="cell">press_briefings</div>
+    <div><span class="run-status succeeded">SUCCEEDED</span></div>
+  </div>
+</div>
+
+<!-- Processing queue -->
+<div class="panel">
+  <div class="panel-header">
+    <span class="panel-title">Processing Queue — Last 6 Documents</span>
+  </div>
+  <div style="display:grid;grid-template-columns:80px 200px 80px 80px 80px 1fr;padding:8px 16px;border-bottom:1px solid var(--border);background:var(--surface-2)">
+    <div class="th">Source</div>
+    <div class="th">Title (truncated)</div>
+    <div class="th">Tokens↑</div>
+    <div class="th">Tokens↓</div>
+    <div class="th">Status</div>
+    <div class="th">Model</div>
+  </div>
+  <div class="queue-row">
+    <div class="cell bold">whitehouse</div>
+    <div class="cell" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">AI infrastructure contract awarded...</div>
+    <div class="cell">1,240</div>
+    <div class="cell">320</div>
+    <span class="proc-status succeeded">SUCCEEDED</span>
+    <div class="cell">claude-sonnet-4-6</div>
+  </div>
+  <div class="queue-row">
+    <div class="cell bold">truthsocial</div>
+    <div class="cell" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Tesla leading the future of transport...</div>
+    <div class="cell">890</div>
+    <div class="cell">210</div>
+    <span class="proc-status succeeded">SUCCEEDED</span>
+    <div class="cell">claude-sonnet-4-6</div>
+  </div>
+  <div class="queue-row">
+    <div class="cell bold">nist</div>
+    <div class="cell" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">NIST grant: quantum computing standards</div>
+    <div class="cell">1,540</div>
+    <div class="cell">280</div>
+    <span class="proc-status succeeded">SUCCEEDED</span>
+    <div class="cell">claude-sonnet-4-6</div>
+  </div>
+  <div class="queue-row">
+    <div class="cell bold">sec_8k</div>
+    <div class="cell" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Form 8-K — material definitive agreement</div>
+    <div class="cell">2,100</div>
+    <div class="cell">410</div>
+    <span class="proc-status succeeded">SUCCEEDED</span>
+    <div class="cell">claude-sonnet-4-6</div>
+  </div>
+  <div class="queue-row">
+    <div class="cell bold">whitehouse</div>
+    <div class="cell" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Executive Order on domestic production...</div>
+    <div class="cell">1,820</div>
+    <div class="cell">—</div>
+    <span class="proc-status pending">PENDING</span>
+    <div class="cell">claude-sonnet-4-6</div>
+  </div>
+  <div class="queue-row">
+    <div class="cell bold">nist</div>
+    <div class="cell" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Cybersecurity framework update 2.1</div>
+    <div class="cell">960</div>
+    <div class="cell">190</div>
+    <span class="proc-status invalid">INVALID</span>
+    <div class="cell">claude-sonnet-4-6</div>
+  </div>
+</div>
+
+</body>
+</html>

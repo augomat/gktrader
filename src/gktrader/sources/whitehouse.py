@@ -1,0 +1,148 @@
+"""White House news RSS adapter.
+
+Primary path: https://www.whitehouse.gov/news/feed/
+
+Polls the RSS feed, fetches article detail HTML, normalises to
+the locked NormalizedDocument schema, and derives stable external
+IDs from the RSS guid.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from datetime import datetime, timezone
+from typing import Any
+
+import feedparser
+import httpx
+import trafilatura
+from pydantic import HttpUrl
+
+from gktrader.domain.contracts import FetchIndexResult, NormalizedDocument, SourceIndexItem
+from gktrader.domain.enums import SourceTier
+from gktrader.sources.base import SourceAdapter
+
+FEED_URL = "https://www.whitehouse.gov/news/feed/"
+
+
+class WhiteHouseAdapter(SourceAdapter):
+    """Adapter for the White House press release RSS feed."""
+
+    source_name: str = "whitehouse"
+    source_tier: SourceTier = SourceTier.TIER_1
+    poll_interval_seconds: int = 60
+
+    def fetch_index(
+        self,
+        cursor: str | None = None,
+        conditional_headers: dict[str, str] | None = None,
+    ) -> FetchIndexResult:
+        headers = dict(conditional_headers or {})
+        resp = self.client.get(FEED_URL, headers=headers or None)
+        resp.raise_for_status()
+
+        feed = feedparser.parse(resp.content)
+        items: list[SourceIndexItem] = []
+        for entry in feed.entries:
+            ext_id = self.derive_stable_external_id(entry)
+            link = entry.get("link", "")
+            pub = _parse_rss_datetime(entry.get("published_parsed"))
+            updated = _parse_rss_datetime(entry.get("updated_parsed"))
+            items.append(
+                SourceIndexItem(
+                    external_id=ext_id,
+                    detail_url=HttpUrl(link),
+                    title=entry.get("title", ""),
+                    published_at=pub,
+                    updated_at=updated,
+                    metadata={"summary": entry.get("summary", "")},
+                )
+            )
+
+        etag = resp.headers.get("etag")
+        last_modified = resp.headers.get("last-modified")
+        return FetchIndexResult(
+            items=items,
+            fetch_path="rss",
+            etag=etag,
+            last_modified=last_modified,
+        )
+
+    def fetch_detail(self, item: SourceIndexItem) -> Any:
+        resp = self.client.get(str(item.detail_url))
+        resp.raise_for_status()
+        return resp.text
+
+    def normalize(self, raw_item: Any) -> NormalizedDocument:
+        if isinstance(raw_item, str):
+            return self._normalize_html_detail(raw_item)
+        # When raw_item is a feedparser entry (for lightweight normalisation)
+        return self._normalize_entry(raw_item)
+
+    def _normalize_entry(self, entry: Any) -> NormalizedDocument:
+        ext_id = self.derive_stable_external_id(entry)
+        link = str(entry.get("link", ""))
+        pub = _parse_rss_datetime(entry.get("published_parsed"))
+        updated = _parse_rss_datetime(entry.get("updated_parsed"))
+        text = entry.get("summary", "") or entry.get("title", "")
+        return NormalizedDocument(
+            source_name=self.source_name,
+            source_tier=self.source_tier,
+            fetch_path="rss",
+            external_id=ext_id,
+            canonical_url=HttpUrl(link),
+            title=entry.get("title", ""),
+            text=text,
+            published_at=pub,
+            updated_at=updated,
+            detected_at=datetime.now(timezone.utc),
+            source_metadata={"type": "rss_entry", "summary": entry.get("summary", "")},
+        )
+
+    def _normalize_html_detail(self, html: str) -> NormalizedDocument:
+        extracted = trafilatura.extract(html, output_format="txt", include_tables=False)
+        text = (extracted or "").strip()
+        # Build content hash as the external ID when no RSS entry is available
+        content_hash = hashlib.sha256((text or "").encode("utf-8")).hexdigest()[:16]
+        return NormalizedDocument(
+            source_name=self.source_name,
+            source_tier=self.source_tier,
+            fetch_path="rss_detail",
+            external_id=f"wh-detail-{content_hash}",
+            canonical_url=HttpUrl("https://www.whitehouse.gov/news/"),
+            title="",
+            text=text or "",
+            published_at=None,
+            updated_at=None,
+            detected_at=datetime.now(timezone.utc),
+            source_metadata={"type": "detail_page"},
+        )
+
+    def derive_stable_external_id(self, raw_item: Any) -> str:
+        if hasattr(raw_item, "get"):
+            guid = raw_item.get("id") or raw_item.get("guid") or raw_item.get("link", "")
+            return _stable_id_from_url(guid)
+        if isinstance(raw_item, str):
+            return _stable_id_from_url(raw_item)
+        return _stable_id_from_url(str(raw_item))
+
+
+# ---------------------------------------------------------------------------
+# Internal helpers
+# ---------------------------------------------------------------------------
+
+
+def _parse_rss_datetime(struct_time: Any) -> datetime | None:
+    """Convert a time.struct_time from feedparser to an aware UTC datetime."""
+    if struct_time is None:
+        return None
+    import calendar
+    import time
+
+    ts = calendar.timegm(struct_time)
+    return datetime.fromtimestamp(ts, tz=timezone.utc)
+
+
+def _stable_id_from_url(url: str) -> str:
+    """Derive a deterministic external ID from a URL or guid string."""
+    return "wh-" + hashlib.sha256(url.encode("utf-8")).hexdigest()[:16]

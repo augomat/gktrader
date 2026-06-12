@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>NIST News</title>
+    <link>https://www.nist.gov/news-events/news</link>
+    <description>National Institute of Standards and Technology news</description>
+    <item>
+      <title>NIST Awards $15 Million for Quantum Computing Research</title>
+      <link>https://www.nist.gov/news/2024/03/quantum-computing-grant</link>
+      <guid isPermaLink="false">nist-qc-2024-001</guid>
+      <pubDate>Mon, 04 Mar 2024 09:00:00 +0000</pubDate>
+      <dc:subject>Quantum</dc:subject>
+      <dc:subject>CHIPS</dc:subject>
+      <description>NIST announced $15 million in new grants for quantum computing research at five universities under the CHIPS and Science Act.</description>
+      <category>Funding</category>
+    </item>
+    <item>
+      <title>NIST Releases Updated Cybersecurity Framework</title>
+      <link>https://www.nist.gov/news/2024/02/cybersecurity-framework-v2</link>
+      <guid isPermaLink="false">nist-csf-2024-002</guid>
+      <pubDate>Wed, 28 Feb 2024 14:00:00 +0000</pubDate>
+      <dc:subject>Cybersecurity</dc:subject>
+      <description>Version 2.0 of the NIST Cybersecurity Framework includes new guidance for supply chain risk management and AI systems.</description>
+      <category>Standards</category>
+    </item>
+    <item>
+      <title>NIST and Industry Partners Demonstrate Chip Packaging Breakthrough</title>
+      <link>https://www.nist.gov/news/2024/02/chip-packaging-breakthrough</link>
+      <guid isPermaLink="false">nist-chip-2024-003</guid>
+      <pubDate>Fri, 23 Feb 2024 11:30:00 +0000</pubDate>
+      <dc:subject>Semiconductors</dc:subject>
+      <dc:subject>CHIPS</dc:subject>
+      <description>NIST researchers in collaboration with Intel and AMD demonstrated a new advanced chip packaging technique that could reduce costs by 30%.</description>
+      <category>Research</category>
+    </item>
+  </channel>
+</rss>

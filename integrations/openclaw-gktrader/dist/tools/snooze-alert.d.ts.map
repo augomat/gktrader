@@ -1,0 +1,1 @@
+{"version":3,"file":"snooze-alert.d.ts","sourceRoot":"","sources":["../../src/tools/snooze-alert.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,wBAAwB,EAAE,MAAM,kBAAkB,CAAC;AACjE,OAAO,EAAE,iBAAiB,EAAE,MAAM,eAAe,CAAC;AAGlD,eAAO,MAAM,eAAe,EAAE,wBAAwB,CACpD;IAAE,UAAU,EAAE,MAAM,CAAC;IAAC,YAAY,EAAE,MAAM,CAAA;CAAE,EAC5C,OAAO,iBAAiB,CAuBzB,CAAC"}

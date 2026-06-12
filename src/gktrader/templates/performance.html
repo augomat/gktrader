@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}Performance — GKTrader{% endblock %}
+
+{% block extra_css %}
+.page-title { font-size: 16px; font-weight: 600; margin-bottom: 4px; }
+.page-sub { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+.stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 16px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+.stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+.stat-value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+.stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+.table-head { display: grid; grid-template-columns: 70px 70px 100px 90px 90px 90px 90px 90px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.th { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); font-family: var(--font-mono); text-align: center; }
+.th:first-child, .th:nth-child(2) { text-align: left; }
+.trade-row { display: grid; grid-template-columns: 70px 70px 100px 90px 90px 90px 90px 90px; padding: 11px 16px; border-bottom: 1px solid var(--border); align-items: center; transition: background .12s; }
+.trade-row:last-child { border-bottom: none; }
+.trade-row:hover { background: var(--surface-2); }
+.cell { font-family: var(--font-mono); font-size: 12px; color: var(--text); text-align: center; }
+.cell.left { text-align: left; }
+.cell.muted { color: var(--text-muted); }
+.ret { font-family: var(--font-mono); font-size: 12px; font-weight: 600; text-align: center; }
+.ret.pos { color: var(--bullish); }
+.ret.neg { color: var(--bearish); }
+.ret.miss { color: var(--text-dim); font-size: 11px; }
+.ret.pending { color: var(--watch); font-size: 11px; }
+.dir-badge { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 5px; border-radius: 3px; }
+.dir-badge.bull { background: rgba(63,185,80,.12); color: var(--bullish); }
+.dir-badge.bear { background: rgba(248,81,73,.12); color: var(--bearish); }
+{% endblock %}
+
+{% block content %}
+<div class="page-title">Paper Trade Performance</div>
+<div class="page-sub">Benchmarked returns across 1h / 1d / 5d / 20d horizons — IEX partial-market data</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Total Trades</div>
+    <div class="stat-value">{{ summary.total_trades }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Avg Return (1d)</div>
+    {% if summary.avg_return_1d is not none %}
+    <div class="stat-value {% if summary.avg_return_1d >= 0 %}green{% else %}red{% endif %}">
+      {{ "%+.1f%%"|format(summary.avg_return_1d) }}
+    </div>
+    {% else %}
+    <div class="stat-value" style="color:var(--text-dim)">—</div>
+    {% endif %}
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Profitable (1d)</div>
+    <div class="stat-value green">{{ summary.positive_count }}</div>
+    <div class="stat-sub">of {{ summary.total_trades }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Best (1d)</div>
+    {% if summary.best_return is not none %}
+    <div class="stat-value green">{{ "%+.1f%%"|format(summary.best_return) }}</div>
+    {% else %}
+    <div class="stat-value" style="color:var(--text-dim)">—</div>
+    {% endif %}
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Worst (1d)</div>
+    {% if summary.worst_return is not none %}
+    <div class="stat-value red">{{ "%+.1f%%"|format(summary.worst_return) }}</div>
+    {% else %}
+    <div class="stat-value" style="color:var(--text-dim)">—</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="table-head">
+    <div class="th" style="text-align:left">Ticker</div>
+    <div class="th" style="text-align:left">Dir</div>
+    <div class="th" style="text-align:left">Notional</div>
+    <div class="th" style="text-align:left">Entry</div>
+    <div class="th">1h</div>
+    <div class="th">1d</div>
+    <div class="th">5d</div>
+    <div class="th">20d</div>
+  </div>
+
+  {% if trades %}
+  {% for t in trades %}
+  <div class="trade-row">
+    <div class="ticker {% if t.direction == 'bullish' %}bull{% else %}bear{% endif %} left" style="font-size:14px">{{ t.ticker }}</div>
+    <div class="cell left"><span class="dir-badge {% if t.direction == 'bullish' %}bull{% else %}bear{% endif %}">{% if t.direction == 'bullish' %}LONG{% else %}SHORT{% endif %}</span></div>
+    <div class="cell left">EUR {{ "%.0f"|format(t.notional_eur) }}</div>
+    <div class="cell muted left">{% if t.entry_price %}${{ "%.2f"|format(t.entry_price) }}{% else %}—{% endif %}</div>
+
+    {% for snap_key in ['r1h','r1d','r5d','r20d'] %}
+    {% set snap = t[snap_key] %}
+    {% if snap is none %}
+    <div class="ret pending">—</div>
+    {% elif snap.missing_data %}
+    <div class="ret miss">missing</div>
+    {% elif snap.return_pct is not none %}
+    <div class="ret {% if snap.return_pct >= 0 %}pos{% else %}neg{% endif %}">{{ "%+.1f%%"|format(snap.return_pct) }}</div>
+    {% else %}
+    <div class="ret pending">—</div>
+    {% endif %}
+    {% endfor %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <div style="padding:32px;text-align:center;color:var(--text-dim);font-size:13px">No paper trades yet. Trades are recorded automatically for each TRADEABLE/REVIEW alert.</div>
+  {% endif %}
+</div>
+{% endblock %}

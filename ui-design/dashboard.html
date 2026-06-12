@@ -1,0 +1,364 @@
+<!-- @dsCard group="Dashboard" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GKTrader — Dashboard</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface-2: #1c2128;
+    --border: #21262d;
+    --border-muted: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #484f58;
+    --tradeable: #3fb950;
+    --tradeable-bg: #0d2d17;
+    --review: #e3b341;
+    --review-bg: #272115;
+    --watch: #388bfd;
+    --watch-bg: #0c1f3b;
+    --avoid: #db6d28;
+    --avoid-bg: #2d1a0e;
+    --ignore: #6e7681;
+    --bullish: #3fb950;
+    --bearish: #f85149;
+    --neutral: #8b949e;
+    --tier1: #79c0ff;
+    --tier2: #d2a8ff;
+    --font-mono: 'SFMono-Regular', 'Cascadia Code', 'Consolas', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.5; }
+  .shell { display: grid; grid-template-rows: 48px 1fr; min-height: 100vh; }
+
+  /* Topbar */
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); display: flex; align-items: center; padding: 0 20px; gap: 16px; }
+  .topbar-logo { font-family: var(--font-mono); font-weight: 700; font-size: 15px; letter-spacing: .04em; color: var(--text); }
+  .topbar-logo span { color: var(--tradeable); }
+  .topbar-nav { display: flex; gap: 4px; margin-left: auto; }
+  .nav-btn { background: none; border: none; color: var(--text-muted); padding: 5px 10px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+  .nav-btn:hover { background: var(--surface-2); color: var(--text); }
+  .nav-btn.active { color: var(--text); background: var(--surface-2); }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--tradeable); margin-left: 8px; box-shadow: 0 0 6px var(--tradeable); }
+
+  /* Content */
+  .content { padding: 20px; display: flex; flex-direction: column; gap: 20px; max-width: 1280px; }
+
+  /* KPI row */
+  .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .kpi-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 18px; }
+  .kpi-label { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 6px; }
+  .kpi-value { font-family: var(--font-mono); font-size: 26px; font-weight: 600; }
+  .kpi-sub { font-size: 12px; color: var(--text-muted); margin-top: 4px; }
+  .kpi-value.green { color: var(--tradeable); }
+  .kpi-value.amber { color: var(--review); }
+  .kpi-value.blue { color: var(--watch); }
+  .kpi-value.white { color: var(--text); }
+
+  /* Two-column layout */
+  .two-col { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
+
+  /* Panel */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; padding: 12px 16px; border-bottom: 1px solid var(--border); }
+  .panel-title { font-size: 13px; font-weight: 600; color: var(--text); }
+  .panel-action { font-size: 12px; color: var(--watch); cursor: pointer; background: none; border: none; }
+  .panel-body { padding: 0; }
+
+  /* Alert list */
+  .alert-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; }
+  .alert-row:last-child { border-bottom: none; }
+  .alert-row:hover { background: var(--surface-2); }
+  .alert-level-bar { width: 3px; border-radius: 2px; flex-shrink: 0; align-self: stretch; }
+  .alert-level-bar.tradeable { background: var(--tradeable); }
+  .alert-level-bar.review { background: var(--review); }
+  .alert-level-bar.avoid { background: var(--avoid); }
+  .alert-level-bar.watch { background: var(--watch); }
+  .alert-main { flex: 1; min-width: 0; }
+  .alert-top { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+  .ticker { font-family: var(--font-mono); font-weight: 700; font-size: 15px; }
+  .ticker.bull { color: var(--bullish); }
+  .ticker.bear { color: var(--bearish); }
+  .badge { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 6px; border-radius: 4px; letter-spacing: .04em; }
+  .badge.tradeable { background: var(--tradeable-bg); color: var(--tradeable); border: 1px solid var(--tradeable); }
+  .badge.review { background: var(--review-bg); color: var(--review); border: 1px solid var(--review); }
+  .badge.avoid { background: var(--avoid-bg); color: var(--avoid); border: 1px solid var(--avoid); }
+  .badge.watch { background: var(--watch-bg); color: var(--watch); border: 1px solid var(--watch); }
+  .badge.ignore { background: #161b22; color: var(--ignore); border: 1px solid var(--ignore); }
+  .alert-subtitle { font-size: 12px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .alert-meta { font-size: 11px; color: var(--text-dim); margin-top: 2px; font-family: var(--font-mono); }
+  .score-pill { display: flex; align-items: center; gap: 3px; font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); flex-shrink: 0; }
+  .score-dots { display: flex; gap: 2px; }
+  .score-dot { width: 6px; height: 6px; border-radius: 50%; }
+  .score-dot.filled { background: var(--tradeable); }
+  .score-dot.empty { background: var(--border-muted); }
+
+  /* Pipeline health */
+  .health-row { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); gap: 10px; font-size: 13px; }
+  .health-row:last-child { border-bottom: none; }
+  .health-source { font-family: var(--font-mono); font-size: 12px; color: var(--text); width: 110px; flex-shrink: 0; }
+  .health-tier { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 1px 5px; border-radius: 3px; flex-shrink: 0; }
+  .health-tier.t1 { background: rgba(121,192,255,.15); color: var(--tier1); }
+  .health-tier.t2 { background: rgba(210,168,255,.12); color: var(--tier2); }
+  .health-status { margin-left: auto; }
+  .status-badge { font-size: 11px; font-family: var(--font-mono); font-weight: 600; padding: 2px 7px; border-radius: 4px; }
+  .status-badge.ok { color: var(--tradeable); background: var(--tradeable-bg); }
+  .status-badge.deg { color: var(--review); background: var(--review-bg); }
+  .status-badge.fail { color: var(--bearish); background: rgba(248,81,73,.12); }
+  .health-last { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); width: 80px; text-align: right; }
+  .health-count { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); width: 46px; text-align: center; }
+
+  /* Open positions */
+  .pos-row { display: flex; align-items: center; padding: 10px 16px; border-bottom: 1px solid var(--border); gap: 10px; font-size: 13px; }
+  .pos-row:last-child { border-bottom: none; }
+  .pos-ticker { font-family: var(--font-mono); font-weight: 700; font-size: 14px; width: 60px; }
+  .pos-ticker.bull { color: var(--bullish); }
+  .pos-ticker.bear { color: var(--bearish); }
+  .pos-dir { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 1px 5px; border-radius: 3px; }
+  .pos-dir.bull { background: rgba(63,185,80,.12); color: var(--bullish); }
+  .pos-dir.bear { background: rgba(248,81,73,.12); color: var(--bearish); }
+  .pos-eur { font-family: var(--font-mono); font-size: 14px; font-weight: 600; color: var(--text); margin-left: auto; }
+  .pos-price { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .pos-updated { font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
+</style>
+</head>
+<body>
+<div class="shell">
+  <nav class="topbar">
+    <div class="topbar-logo">GK<span>TRADER</span></div>
+    <div class="topbar-nav">
+      <button class="nav-btn active">Dashboard</button>
+      <button class="nav-btn">Alerts</button>
+      <button class="nav-btn">Positions</button>
+      <button class="nav-btn">Performance</button>
+      <button class="nav-btn">Pipeline</button>
+    </div>
+    <div class="status-dot" title="System operational"></div>
+  </nav>
+  <main class="content">
+
+    <!-- KPI row -->
+    <div class="kpi-row">
+      <div class="kpi-card">
+        <div class="kpi-label">Tradeable Alerts Today</div>
+        <div class="kpi-value green">3</div>
+        <div class="kpi-sub">+1 since last hour</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Open Positions</div>
+        <div class="kpi-value white">5</div>
+        <div class="kpi-sub">EUR 4,200 deployed</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Pipeline Health</div>
+        <div class="kpi-value blue">4 / 5</div>
+        <div class="kpi-sub">Commerce degraded</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Paper Return (1d avg)</div>
+        <div class="kpi-value green">+4.2%</div>
+        <div class="kpi-sub">across 12 paper trades</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <!-- Recent alerts -->
+      <div class="panel">
+        <div class="panel-header">
+          <span class="panel-title">Recent Alerts</span>
+          <button class="panel-action">View all →</button>
+        </div>
+        <div class="panel-body">
+
+          <div class="alert-row">
+            <div class="alert-level-bar tradeable"></div>
+            <div class="alert-main">
+              <div class="alert-top">
+                <span class="ticker bull">$NVDA</span>
+                <span class="badge tradeable">TRADEABLE</span>
+              </div>
+              <div class="alert-subtitle">🚀 BULLISH — government_contract · Nvidia Corporation</div>
+              <div class="alert-meta">whitehouse · 2 min ago · latency 45s</div>
+            </div>
+            <div class="score-pill">
+              <div class="score-dots">
+                <div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div>
+              </div>
+              <span>5</span>
+            </div>
+          </div>
+
+          <div class="alert-row">
+            <div class="alert-level-bar review"></div>
+            <div class="alert-main">
+              <div class="alert-top">
+                <span class="ticker bull">$TSLA</span>
+                <span class="badge review">REVIEW</span>
+              </div>
+              <div class="alert-subtitle">🚀 BULLISH — presidential_positive_mention · Tesla, Inc.</div>
+              <div class="alert-meta">truthsocial · 18 min ago · latency 3m12s</div>
+            </div>
+            <div class="score-pill">
+              <div class="score-dots">
+                <div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot empty"></div><div class="score-dot empty"></div>
+              </div>
+              <span>3</span>
+            </div>
+          </div>
+
+          <div class="alert-row">
+            <div class="alert-level-bar avoid"></div>
+            <div class="alert-main">
+              <div class="alert-top">
+                <span class="ticker bear">$MRNA</span>
+                <span class="badge avoid">AVOID CHASE</span>
+              </div>
+              <div class="alert-subtitle">🔴 BEARISH — regulatory_headwind · Moderna, Inc.</div>
+              <div class="alert-meta">whitehouse · 34 min ago · +27.4% already moved</div>
+            </div>
+            <div class="score-pill">
+              <div class="score-dots">
+                <div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot empty"></div>
+              </div>
+              <span>4</span>
+            </div>
+          </div>
+
+          <div class="alert-row">
+            <div class="alert-level-bar watch"></div>
+            <div class="alert-main">
+              <div class="alert-top">
+                <span class="ticker bull">$LMT</span>
+                <span class="badge watch">WATCH</span>
+              </div>
+              <div class="alert-subtitle">🚀 BULLISH — government_funding · Lockheed Martin</div>
+              <div class="alert-meta">nist · 1h 2m ago · latency 12m</div>
+            </div>
+            <div class="score-pill">
+              <div class="score-dots">
+                <div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot empty"></div><div class="score-dot empty"></div><div class="score-dot empty"></div>
+              </div>
+              <span>2</span>
+            </div>
+          </div>
+
+          <div class="alert-row">
+            <div class="alert-level-bar tradeable"></div>
+            <div class="alert-main">
+              <div class="alert-top">
+                <span class="ticker bear">$CVX</span>
+                <span class="badge tradeable">TRADEABLE</span>
+              </div>
+              <div class="alert-subtitle">🔴 BEARISH — regulatory_headwind · Chevron Corp.</div>
+              <div class="alert-meta">whitehouse · 2h 11m ago · latency 1m8s</div>
+            </div>
+            <div class="score-pill">
+              <div class="score-dots">
+                <div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div><div class="score-dot filled"></div>
+              </div>
+              <span>5</span>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- Right column -->
+      <div style="display:flex;flex-direction:column;gap:16px;">
+
+        <!-- Open positions -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Open Positions</span>
+            <button class="panel-action">Manage →</button>
+          </div>
+          <div class="panel-body">
+            <div class="pos-row">
+              <span class="pos-ticker bull">NVDA</span>
+              <span class="pos-dir bull">LONG</span>
+              <span class="pos-price">avg $875.40</span>
+              <span class="pos-eur">EUR 1,000</span>
+            </div>
+            <div class="pos-row">
+              <span class="pos-ticker bull">LMT</span>
+              <span class="pos-dir bull">LONG</span>
+              <span class="pos-price">avg $462.10</span>
+              <span class="pos-eur">EUR 800</span>
+            </div>
+            <div class="pos-row">
+              <span class="pos-ticker bear">CVX</span>
+              <span class="pos-dir bear">SHORT</span>
+              <span class="pos-price">avg $151.20</span>
+              <span class="pos-eur">EUR 1,000</span>
+            </div>
+            <div class="pos-row">
+              <span class="pos-ticker bull">TSLA</span>
+              <span class="pos-dir bull">LONG</span>
+              <span class="pos-price">avg $183.50</span>
+              <span class="pos-eur">EUR 500</span>
+            </div>
+            <div class="pos-row">
+              <span class="pos-ticker bull">RTX</span>
+              <span class="pos-dir bull">LONG</span>
+              <span class="pos-price">avg $94.80</span>
+              <span class="pos-eur">EUR 900</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Pipeline health -->
+        <div class="panel">
+          <div class="panel-header">
+            <span class="panel-title">Pipeline Health</span>
+            <button class="panel-action">Details →</button>
+          </div>
+          <div class="panel-body">
+            <div class="health-row">
+              <span class="health-source">whitehouse</span>
+              <span class="health-tier t1">T1</span>
+              <span class="health-count">12 new</span>
+              <span class="health-last">2m ago</span>
+              <span class="health-status"><span class="status-badge ok">OK</span></span>
+            </div>
+            <div class="health-row">
+              <span class="health-source">truthsocial</span>
+              <span class="health-tier t1">T1</span>
+              <span class="health-count">4 new</span>
+              <span class="health-last">3m ago</span>
+              <span class="health-status"><span class="status-badge ok">OK</span></span>
+            </div>
+            <div class="health-row">
+              <span class="health-source">nist</span>
+              <span class="health-tier t2">T2</span>
+              <span class="health-count">7 new</span>
+              <span class="health-last">5m ago</span>
+              <span class="health-status"><span class="status-badge ok">OK</span></span>
+            </div>
+            <div class="health-row">
+              <span class="health-source">sec_8k</span>
+              <span class="health-tier t1">T1</span>
+              <span class="health-count">0 new</span>
+              <span class="health-last">4m ago</span>
+              <span class="health-status"><span class="status-badge ok">OK</span></span>
+            </div>
+            <div class="health-row">
+              <span class="health-source">commerce</span>
+              <span class="health-tier t2">T2</span>
+              <span class="health-count">—</span>
+              <span class="health-last">18m ago</span>
+              <span class="health-status"><span class="status-badge deg">DEGRADED</span></span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>

@@ -4,7 +4,7 @@ mode: subagent
 model: openrouter/deepseek/deepseek-v4-flash
 hidden: true
 temperature: 0.1
-steps: 25
+steps: 75
 permission:
   read: allow
   edit: allow

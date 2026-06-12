@@ -1,0 +1,226 @@
+<!-- @dsCard group="Performance" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Paper Trade Performance</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+    --border: #21262d; --border-muted: #30363d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+    --tradeable: #3fb950; --review: #e3b341; --watch: #388bfd; --avoid: #db6d28;
+    --bullish: #3fb950; --bearish: #f85149;
+    --font-mono: 'SFMono-Regular', 'Cascadia Code', 'Consolas', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 24px; }
+
+  .page-header { margin-bottom: 20px; }
+  .page-title { font-size: 16px; font-weight: 600; }
+  .page-sub { font-size: 12px; color: var(--text-muted); margin-top: 2px; }
+
+  /* Stats row */
+  .stats-row { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 20px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; }
+  .stat-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+  .stat-value { font-family: var(--font-mono); font-size: 20px; font-weight: 700; }
+  .stat-sub { font-size: 11px; color: var(--text-muted); margin-top: 3px; }
+
+  /* Table */
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .table-head { display: grid; grid-template-columns: 70px 80px 90px 80px 90px 90px 90px 90px 90px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); gap: 0; }
+  .th { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); font-family: var(--font-mono); }
+  .th.right { text-align: right; }
+  .th.center { text-align: center; }
+
+  .trade-row { display: grid; grid-template-columns: 70px 80px 90px 80px 90px 90px 90px 90px 90px; padding: 11px 16px; border-bottom: 1px solid var(--border); align-items: center; gap: 0; transition: background .12s; cursor: pointer; }
+  .trade-row:last-child { border-bottom: none; }
+  .trade-row:hover { background: var(--surface-2); }
+
+  .ticker { font-family: var(--font-mono); font-weight: 800; font-size: 14px; }
+  .ticker.bull { color: var(--bullish); }
+  .ticker.bear { color: var(--bearish); }
+
+  .lvl-badge { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 5px; border-radius: 4px; }
+  .lvl-badge.tradeable { background: rgba(63,185,80,.1); color: var(--tradeable); }
+  .lvl-badge.review    { background: rgba(227,179,65,.1); color: var(--review); }
+
+  .cell { font-family: var(--font-mono); font-size: 12px; color: var(--text); }
+  .cell.muted { color: var(--text-muted); }
+  .cell.dim { color: var(--text-dim); font-size: 11px; }
+  .cell.center { text-align: center; }
+
+  /* Horizon return cell */
+  .ret { font-family: var(--font-mono); font-size: 12px; font-weight: 600; text-align: center; }
+  .ret.pos { color: var(--bullish); }
+  .ret.neg { color: var(--bearish); }
+  .ret.miss { color: var(--text-dim); }
+  .ret.pending { color: var(--watch); font-size: 11px; }
+
+  /* Weekly summary */
+  .weekly-panel { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; margin-top: 20px; }
+  .weekly-title { font-size: 13px; font-weight: 600; margin-bottom: 12px; }
+  .weekly-content { font-size: 12px; color: var(--text-muted); line-height: 1.65; font-family: var(--font-mono); }
+  .weekly-highlight { color: var(--text); }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-title">Paper Trade Performance</div>
+  <div class="page-sub">12 paper trades · notional benchmarking across 1h / 1d / 5d / 20d horizons</div>
+</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Total Paper Trades</div>
+    <div class="stat-value" style="color:var(--text)">12</div>
+    <div class="stat-sub">EUR 11,000 notional</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Avg Return (1d)</div>
+    <div class="stat-value" style="color:var(--bullish)">+4.2%</div>
+    <div class="stat-sub">8 of 12 positive</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Best Trade (1d)</div>
+    <div class="stat-value" style="color:var(--bullish)">+18.4%</div>
+    <div class="stat-sub">NVDA · government_contract</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Worst Trade (1d)</div>
+    <div class="stat-value" style="color:var(--bearish)">−7.1%</div>
+    <div class="stat-sub">MRNA · mapping_conf low</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">TRADEABLE Accuracy</div>
+    <div class="stat-value" style="color:var(--tradeable)">83%</div>
+    <div class="stat-sub">5/6 TRADEABLE profitable</div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="table-head">
+    <div class="th">Ticker</div>
+    <div class="th">Level</div>
+    <div class="th">Notional</div>
+    <div class="th">Entry</div>
+    <div class="th center">1h</div>
+    <div class="th center">1d</div>
+    <div class="th center">5d</div>
+    <div class="th center">20d</div>
+    <div class="th">Source</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bull">NVDA</div>
+    <div><span class="lvl-badge tradeable">TRADE</span></div>
+    <div class="cell">EUR 1,000</div>
+    <div class="cell muted">$875.40</div>
+    <div class="ret pos">+3.2%</div>
+    <div class="ret pos">+18.4%</div>
+    <div class="ret pending">—</div>
+    <div class="ret pending">—</div>
+    <div class="cell dim">whitehouse</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bull">LMT</div>
+    <div><span class="lvl-badge tradeable">TRADE</span></div>
+    <div class="cell">EUR 1,000</div>
+    <div class="cell muted">$462.10</div>
+    <div class="ret pos">+1.1%</div>
+    <div class="ret pos">+6.3%</div>
+    <div class="ret pos">+9.8%</div>
+    <div class="ret pending">—</div>
+    <div class="cell dim">nist</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bear">CVX</div>
+    <div><span class="lvl-badge tradeable">TRADE</span></div>
+    <div class="cell">EUR 1,000</div>
+    <div class="cell muted">$151.20</div>
+    <div class="ret pos">+2.1%</div>
+    <div class="ret pending">—</div>
+    <div class="ret pending">—</div>
+    <div class="ret pending">—</div>
+    <div class="cell dim">whitehouse</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bull">RTX</div>
+    <div><span class="lvl-badge tradeable">TRADE</span></div>
+    <div class="cell">EUR 1,000</div>
+    <div class="cell muted">$94.80</div>
+    <div class="ret pos">+0.4%</div>
+    <div class="ret pos">+4.1%</div>
+    <div class="ret pos">+7.2%</div>
+    <div class="ret pos">+11.0%</div>
+    <div class="cell dim">commerce</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bull">TSLA</div>
+    <div><span class="lvl-badge review">REVIEW</span></div>
+    <div class="cell">EUR 500</div>
+    <div class="cell muted">$195.20</div>
+    <div class="ret neg">−0.8%</div>
+    <div class="ret neg">−7.1%</div>
+    <div class="ret neg">−3.2%</div>
+    <div class="ret pos">+2.1%</div>
+    <div class="cell dim">truthsocial</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bull">AAPL</div>
+    <div><span class="lvl-badge tradeable">TRADE</span></div>
+    <div class="cell">EUR 1,000</div>
+    <div class="cell muted">$192.30</div>
+    <div class="ret pos">+1.2%</div>
+    <div class="ret pos">+3.9%</div>
+    <div class="ret pos">+5.4%</div>
+    <div class="ret pos">+8.8%</div>
+    <div class="cell dim">whitehouse</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bear">MRNA</div>
+    <div><span class="lvl-badge review">REVIEW</span></div>
+    <div class="cell">EUR 500</div>
+    <div class="cell muted">$75.40</div>
+    <div class="ret neg">−4.2%</div>
+    <div class="ret miss">missing</div>
+    <div class="ret miss">missing</div>
+    <div class="ret miss">missing</div>
+    <div class="cell dim">whitehouse</div>
+  </div>
+
+  <div class="trade-row">
+    <div class="ticker bull">GE</div>
+    <div><span class="lvl-badge tradeable">TRADE</span></div>
+    <div class="cell">EUR 1,000</div>
+    <div class="cell muted">$154.20</div>
+    <div class="ret pos">+2.8%</div>
+    <div class="ret pos">+7.3%</div>
+    <div class="ret pos">+12.1%</div>
+    <div class="ret pos">+15.4%</div>
+    <div class="cell dim">commerce</div>
+  </div>
+
+</div>
+
+<!-- Latest weekly summary -->
+<div class="weekly-panel">
+  <div class="weekly-title">Weekly Report — 2026-06-08</div>
+  <div class="weekly-content">
+    Total trades: <span class="weekly-highlight">12</span> · Total notional: <span class="weekly-highlight">EUR 11,000</span> · Average return (1d): <span class="weekly-highlight" style="color:var(--bullish)">+4.2%</span><br>
+    Best event type: <span class="weekly-highlight">government_contract</span> (avg +12.3%)<br>
+    Weakest: <span class="weekly-highlight">presidential_positive_mention</span> (avg −1.8%, mapping confidence issue)<br>
+    TRADEABLE accuracy: <span class="weekly-highlight" style="color:var(--bullish)">83%</span> · REVIEW accuracy: <span class="weekly-highlight" style="color:var(--review)">40%</span>
+  </div>
+</div>
+
+</body>
+</html>

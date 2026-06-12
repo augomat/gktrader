@@ -1,0 +1,289 @@
+<!-- @dsCard group="Alerts" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Alert Card — All Variants</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+    --border: #21262d; --border-muted: #30363d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+    --tradeable: #3fb950; --tradeable-bg: #0d2d17;
+    --review: #e3b341; --review-bg: #272115;
+    --watch: #388bfd; --watch-bg: #0c1f3b;
+    --avoid: #db6d28; --avoid-bg: #2d1a0e;
+    --ignore: #6e7681;
+    --bullish: #3fb950; --bearish: #f85149;
+    --font-mono: 'SFMono-Regular', 'Cascadia Code', 'Consolas', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 24px; display: flex; flex-direction: column; gap: 20px; }
+  h3 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); margin-bottom: 8px; font-family: var(--font-mono); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; max-width: 540px; }
+  .card-accent { height: 3px; }
+  .card-accent.tradeable { background: var(--tradeable); }
+  .card-accent.review    { background: var(--review); }
+  .card-accent.avoid     { background: var(--avoid); }
+  .card-accent.watch     { background: var(--watch); }
+
+  .card-head { padding: 14px 16px 10px; display: flex; align-items: flex-start; gap: 12px; }
+  .dir-icon { font-size: 22px; line-height: 1; }
+  .card-title-block { flex: 1; }
+  .card-ticker-row { display: flex; align-items: center; gap: 8px; margin-bottom: 2px; }
+  .ticker { font-family: var(--font-mono); font-weight: 800; font-size: 17px; }
+  .ticker.bull { color: var(--bullish); }
+  .ticker.bear { color: var(--bearish); }
+  .company { font-size: 12px; color: var(--text-muted); }
+
+  .level-badge { font-family: var(--font-mono); font-size: 10px; font-weight: 700; padding: 3px 8px; border-radius: 5px; letter-spacing: .06em; }
+  .level-badge.tradeable { background: var(--tradeable-bg); color: var(--tradeable); border: 1px solid rgba(63,185,80,.4); }
+  .level-badge.review    { background: var(--review-bg);    color: var(--review);    border: 1px solid rgba(227,179,65,.4); }
+  .level-badge.avoid     { background: var(--avoid-bg);     color: var(--avoid);     border: 1px solid rgba(219,109,40,.4); }
+  .level-badge.watch     { background: var(--watch-bg);     color: var(--watch);     border: 1px solid rgba(56,139,253,.4); }
+
+  .card-event { font-size: 12px; color: var(--text-muted); margin-top: 3px; }
+
+  .card-divider { height: 1px; background: var(--border); margin: 0 16px; }
+
+  .card-meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 0; }
+  .meta-item { padding: 10px 16px; border-right: 1px solid var(--border); }
+  .meta-item:last-child { border-right: none; }
+  .meta-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
+  .meta-value { font-family: var(--font-mono); font-size: 13px; font-weight: 600; }
+
+  /* Score display */
+  .score-bar { display: flex; gap: 3px; align-items: center; }
+  .sdot { width: 7px; height: 7px; border-radius: 50%; }
+  .sdot.on { background: var(--tradeable); }
+  .sdot.off { background: var(--border-muted); }
+  .score-num { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); margin-left: 4px; }
+
+  /* Market context strip */
+  .market-strip { background: var(--surface-2); display: flex; align-items: center; gap: 16px; padding: 8px 16px; border-top: 1px solid var(--border); }
+  .market-price { font-family: var(--font-mono); font-size: 14px; font-weight: 700; }
+  .market-move { font-family: var(--font-mono); font-size: 12px; }
+  .market-move.pos { color: var(--bullish); }
+  .market-move.neg { color: var(--bearish); }
+  .market-status { font-size: 11px; color: var(--text-muted); margin-left: auto; }
+  .market-vol { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+
+  /* Action buttons */
+  .card-actions { display: flex; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--border); background: var(--surface-2); }
+  .btn { flex: 1; padding: 8px 0; border-radius: 6px; font-size: 12px; font-weight: 600; font-family: var(--font-mono); cursor: pointer; border: 1px solid; transition: opacity .15s; }
+  .btn-buy  { background: rgba(63,185,80,.15); color: var(--tradeable); border-color: rgba(63,185,80,.4); }
+  .btn-skip { background: rgba(139,148,158,.1); color: var(--text-muted); border-color: var(--border-muted); }
+  .btn-snooze { background: rgba(56,139,253,.1); color: var(--watch); border-color: rgba(56,139,253,.3); }
+  .btn-reduce { background: rgba(248,81,73,.15); color: var(--bearish); border-color: rgba(248,81,73,.4); }
+  .btn-hedge  { background: rgba(219,109,40,.12); color: var(--avoid); border-color: rgba(219,109,40,.3); }
+
+  .rationale-block { padding: 10px 16px; border-top: 1px solid var(--border); }
+  .rationale-text { font-size: 12px; color: var(--text-muted); line-height: 1.55; }
+  .rationale-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+
+  .source-row { display: flex; align-items: center; gap: 8px; padding: 8px 16px; border-top: 1px solid var(--border); }
+  .source-tier { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 1px 5px; border-radius: 3px; background: rgba(121,192,255,.12); color: #79c0ff; }
+  .source-name { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); }
+  .source-latency { font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); margin-left: auto; }
+</style>
+</head>
+<body>
+
+<h3>Tradeable — Bullish</h3>
+<div class="card">
+  <div class="card-accent tradeable"></div>
+  <div class="card-head">
+    <div class="dir-icon">🚀</div>
+    <div class="card-title-block">
+      <div class="card-ticker-row">
+        <span class="ticker bull">$NVDA</span>
+        <span class="level-badge tradeable">TRADEABLE</span>
+      </div>
+      <div class="company">Nvidia Corporation</div>
+      <div class="card-event">government_contract · bullish · score 5/5</div>
+    </div>
+  </div>
+  <div class="card-divider"></div>
+  <div class="card-meta">
+    <div class="meta-item">
+      <div class="meta-label">Score</div>
+      <div class="score-bar"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><span class="score-num">5/5</span></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Confidence</div>
+      <div class="meta-value" style="color:var(--tradeable)">96%</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Mapping</div>
+      <div class="meta-value" style="color:var(--tradeable)">98%</div>
+    </div>
+  </div>
+  <div class="market-strip">
+    <span class="market-price">$875.40</span>
+    <span class="market-move pos">+3.8%</span>
+    <span class="market-vol">vol 42.1M</span>
+    <span class="market-status">Market OPEN</span>
+  </div>
+  <div class="rationale-block">
+    <div class="rationale-label">Rationale</div>
+    <div class="rationale-text">DoD awarded Nvidia a $600M contract for AI inference infrastructure. Contract ID: DODS-2024-AI-0442. Action status: awarded. Multiple government actors confirmed: DoD, DARPA.</div>
+  </div>
+  <div class="source-row">
+    <span class="source-tier">TIER 1</span>
+    <span class="source-name">whitehouse · press_briefings</span>
+    <span class="source-latency">latency 45s · published 14:22 UTC</span>
+  </div>
+  <div class="card-actions">
+    <button class="btn btn-buy">BUY</button>
+    <button class="btn btn-skip">SKIP</button>
+    <button class="btn btn-snooze">SNOOZE 30m</button>
+  </div>
+</div>
+
+<h3>Tradeable — Bearish</h3>
+<div class="card">
+  <div class="card-accent tradeable"></div>
+  <div class="card-head">
+    <div class="dir-icon">🔴</div>
+    <div class="card-title-block">
+      <div class="card-ticker-row">
+        <span class="ticker bear">$CVX</span>
+        <span class="level-badge tradeable">TRADEABLE</span>
+      </div>
+      <div class="company">Chevron Corporation</div>
+      <div class="card-event">regulatory_headwind · bearish · score 5/5</div>
+    </div>
+  </div>
+  <div class="card-divider"></div>
+  <div class="card-meta">
+    <div class="meta-item">
+      <div class="meta-label">Score</div>
+      <div class="score-bar"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><span class="score-num">5/5</span></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Confidence</div>
+      <div class="meta-value" style="color:var(--tradeable)">91%</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Mapping</div>
+      <div class="meta-value" style="color:var(--tradeable)">95%</div>
+    </div>
+  </div>
+  <div class="market-strip">
+    <span class="market-price">$151.20</span>
+    <span class="market-move neg">-2.1%</span>
+    <span class="market-vol">vol 18.4M</span>
+    <span class="market-status">Market OPEN</span>
+  </div>
+  <div class="rationale-block">
+    <div class="rationale-label">Rationale</div>
+    <div class="rationale-text">New EPA regulations impose binding emissions limits on offshore drilling. Chevron named as primary compliance target. Action status: proposed → confirmed by 8-K. Prior bullish signals: 2 (see below).</div>
+  </div>
+  <div class="source-row">
+    <span class="source-tier">TIER 1</span>
+    <span class="source-name">whitehouse · executive_orders</span>
+    <span class="source-latency">latency 1m8s · published 12:04 UTC</span>
+  </div>
+  <div class="card-actions">
+    <button class="btn btn-reduce">REDUCE / SHORT</button>
+    <button class="btn btn-hedge">HEDGE</button>
+    <button class="btn btn-skip">IGNORE</button>
+  </div>
+</div>
+
+<h3>Review — Moderate Confidence</h3>
+<div class="card">
+  <div class="card-accent review"></div>
+  <div class="card-head">
+    <div class="dir-icon">🚀</div>
+    <div class="card-title-block">
+      <div class="card-ticker-row">
+        <span class="ticker bull">$TSLA</span>
+        <span class="level-badge review">REVIEW</span>
+      </div>
+      <div class="company">Tesla, Inc.</div>
+      <div class="card-event">presidential_positive_mention · bullish · score 3/5</div>
+    </div>
+  </div>
+  <div class="card-divider"></div>
+  <div class="card-meta">
+    <div class="meta-item">
+      <div class="meta-label">Score</div>
+      <div class="score-bar"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot off"></div><div class="sdot off"></div><span class="score-num">3/5</span></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Confidence</div>
+      <div class="meta-value" style="color:var(--review)">74%</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Mapping</div>
+      <div class="meta-value" style="color:var(--review)">88%</div>
+    </div>
+  </div>
+  <div class="market-strip">
+    <span class="market-price">$183.50</span>
+    <span class="market-move pos">+1.2%</span>
+    <span class="market-vol">vol 31.0M</span>
+    <span class="market-status">Market OPEN</span>
+  </div>
+  <div class="source-row">
+    <span class="source-tier">TIER 1</span>
+    <span class="source-name">truthsocial · posts</span>
+    <span class="source-latency">latency 3m12s · 18 min ago</span>
+  </div>
+  <div class="card-actions">
+    <button class="btn btn-buy">BUY</button>
+    <button class="btn btn-skip">SKIP</button>
+    <button class="btn btn-snooze">SNOOZE 30m</button>
+  </div>
+</div>
+
+<h3>Avoid Chase — Already Moved</h3>
+<div class="card">
+  <div class="card-accent avoid"></div>
+  <div class="card-head">
+    <div class="dir-icon">🔴</div>
+    <div class="card-title-block">
+      <div class="card-ticker-row">
+        <span class="ticker bear">$MRNA</span>
+        <span class="level-badge avoid">AVOID CHASE</span>
+      </div>
+      <div class="company">Moderna, Inc.</div>
+      <div class="card-event">regulatory_headwind · bearish · score 4/5</div>
+    </div>
+  </div>
+  <div class="card-divider"></div>
+  <div class="card-meta">
+    <div class="meta-item">
+      <div class="meta-label">Score</div>
+      <div class="score-bar"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot off"></div><span class="score-num">4/5</span></div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Confidence</div>
+      <div class="meta-value" style="color:var(--tradeable)">88%</div>
+    </div>
+    <div class="meta-item">
+      <div class="meta-label">Intraday Move</div>
+      <div class="meta-value" style="color:var(--avoid)">−27.4%</div>
+    </div>
+  </div>
+  <div class="market-strip">
+    <span class="market-price">$58.10</span>
+    <span class="market-move neg">−27.4% ⚠️ chased</span>
+    <span class="market-vol">vol 210M</span>
+    <span class="market-status">Market OPEN</span>
+  </div>
+  <div class="source-row">
+    <span class="source-tier">TIER 1</span>
+    <span class="source-name">whitehouse · press_briefings</span>
+    <span class="source-latency">latency 34m · 34 min ago</span>
+  </div>
+  <div class="card-actions">
+    <button class="btn btn-skip" style="flex:2">SKIP — TOO LATE</button>
+    <button class="btn btn-snooze">WATCH</button>
+  </div>
+</div>
+
+</body>
+</html>

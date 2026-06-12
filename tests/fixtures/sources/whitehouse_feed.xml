@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>White House</title>
+    <link>https://www.whitehouse.gov/news/</link>
+    <description>Official White House news and press releases</description>
+    <item>
+      <title>President Biden Announces New Infrastructure Initiative</title>
+      <link>https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/</link>
+      <guid isPermaLink="false">wh-12345-2024</guid>
+      <pubDate>Mon, 15 Jan 2024 14:30:00 +0000</pubDate>
+      <description>The White House today announced a sweeping new infrastructure initiative focused on bridge repairs across the United States.</description>
+    </item>
+    <item>
+      <title>Readout of Meeting with Tech CEOs</title>
+      <link>https://www.whitehouse.gov/news/2024/01/14/tech-ceo-readout/</link>
+      <guid isPermaLink="false">wh-12344-2024</guid>
+      <pubDate>Sun, 14 Jan 2024 18:00:00 +0000</pubDate>
+      <description>President met with technology leaders to discuss AI safety and innovation.</description>
+    </item>
+    <item>
+      <title>Statement on Semiconductor Manufacturing</title>
+      <link>https://www.whitehouse.gov/news/2024/01/13/semiconductor-statement/</link>
+      <guid isPermaLink="false">wh-12343-2024</guid>
+      <pubDate>Sat, 13 Jan 2024 10:00:00 +0000</pubDate>
+      <description>The Administration announced additional funding under the CHIPS and Science Act for domestic semiconductor fabrication facilities.</description>
+    </item>
+  </channel>
+</rss>

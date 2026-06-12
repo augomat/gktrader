@@ -1,0 +1,239 @@
+<!-- @dsCard group="Design System" -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Design Tokens &amp; Badges</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0d1117; --surface: #161b22; --surface-2: #1c2128;
+    --border: #21262d; --border-muted: #30363d;
+    --text: #e6edf3; --text-muted: #8b949e; --text-dim: #484f58;
+    --tradeable: #3fb950; --tradeable-bg: #0d2d17;
+    --review: #e3b341; --review-bg: #272115;
+    --watch: #388bfd; --watch-bg: #0c1f3b;
+    --avoid: #db6d28; --avoid-bg: #2d1a0e;
+    --ignore: #6e7681;
+    --bullish: #3fb950; --bearish: #f85149;
+    --tier1: #79c0ff; --tier2: #d2a8ff;
+    --font-mono: 'SFMono-Regular', 'Cascadia Code', 'Consolas', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; font-size: 13px; padding: 24px; display: flex; flex-direction: column; gap: 28px; }
+
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .1em; color: var(--text-dim); margin-bottom: 12px; font-family: var(--font-mono); border-bottom: 1px solid var(--border); padding-bottom: 6px; }
+  .group { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px; }
+
+  /* Inline badge row */
+  .badge-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+  /* Alert level badges */
+  .lvl { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 5px; letter-spacing: .05em; }
+  .lvl.tradeable { background: var(--tradeable-bg); color: var(--tradeable); border: 1px solid rgba(63,185,80,.4); }
+  .lvl.review    { background: var(--review-bg);    color: var(--review);    border: 1px solid rgba(227,179,65,.4); }
+  .lvl.watch     { background: var(--watch-bg);     color: var(--watch);     border: 1px solid rgba(56,139,253,.4); }
+  .lvl.avoid     { background: var(--avoid-bg);     color: var(--avoid);     border: 1px solid rgba(219,109,40,.4); }
+  .lvl.ignore    { background: #0d1117; color: var(--ignore); border: 1px solid rgba(110,118,129,.3); }
+
+  /* Direction */
+  .dir { display: inline-flex; align-items: center; gap: 5px; font-family: var(--font-mono); font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 5px; }
+  .dir.bull { background: rgba(63,185,80,.1); color: var(--bullish); }
+  .dir.bear { background: rgba(248,81,73,.1); color: var(--bearish); }
+  .dir.neut { background: rgba(139,148,158,.1); color: var(--text-muted); }
+  .dir.unclear { background: rgba(56,139,253,.08); color: var(--watch); }
+
+  /* Source tier */
+  .tier { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 5px; }
+  .tier.t1 { background: rgba(121,192,255,.12); color: var(--tier1); border: 1px solid rgba(121,192,255,.3); }
+  .tier.t2 { background: rgba(210,168,255,.1); color: var(--tier2); border: 1px solid rgba(210,168,255,.25); }
+  .tier.fb { background: rgba(139,148,158,.08); color: var(--text-dim); border: 1px solid rgba(139,148,158,.2); }
+
+  /* Poll run status */
+  .ps { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 5px; }
+  .ps.succeeded { background: rgba(63,185,80,.1); color: var(--tradeable); }
+  .ps.degraded  { background: rgba(227,179,65,.1); color: var(--review); }
+  .ps.failed    { background: rgba(248,81,73,.1);  color: var(--bearish); }
+  .ps.started   { background: rgba(56,139,253,.1); color: var(--watch); }
+
+  /* Processing status */
+  .proc { font-family: var(--font-mono); font-size: 11px; font-weight: 700; padding: 4px 10px; border-radius: 5px; }
+  .proc.succeeded { background: rgba(63,185,80,.08); color: var(--tradeable); }
+  .proc.pending   { background: rgba(56,139,253,.08); color: var(--watch); }
+  .proc.failed    { background: rgba(248,81,73,.08); color: var(--bearish); }
+  .proc.invalid   { background: rgba(139,148,158,.08); color: var(--text-dim); }
+
+  /* Color palette */
+  .palette { display: flex; flex-wrap: wrap; gap: 8px; }
+  .color-chip { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .chip-swatch { width: 40px; height: 40px; border-radius: 6px; border: 1px solid rgba(255,255,255,.08); }
+  .chip-label { font-family: var(--font-mono); font-size: 9px; color: var(--text-dim); text-align: center; }
+
+  /* Event type tags */
+  .ev { font-family: var(--font-mono); font-size: 10px; padding: 3px 7px; border-radius: 4px; background: var(--surface-2); border: 1px solid var(--border-muted); color: var(--text-muted); }
+
+  /* Catalyst score display */
+  .score-demo { display: flex; gap: 16px; align-items: center; }
+  .score-ex { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+  .score-dots { display: flex; gap: 3px; }
+  .sdot { width: 10px; height: 10px; border-radius: 50%; }
+  .sdot.on { background: var(--tradeable); }
+  .sdot.off { background: var(--border-muted); }
+  .score-n { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+
+  /* Typography specimens */
+  .type-specimen { display: flex; flex-direction: column; gap: 8px; }
+  .ts-row { display: flex; align-items: baseline; gap: 16px; }
+  .ts-label { font-family: var(--font-mono); font-size: 10px; color: var(--text-dim); width: 100px; flex-shrink: 0; }
+  .ts-example { }
+</style>
+</head>
+<body>
+
+<div class="group">
+  <h2>Alert Level Badges</h2>
+  <div class="badge-row">
+    <span class="lvl tradeable">TRADEABLE</span>
+    <span class="lvl review">REVIEW</span>
+    <span class="lvl watch">WATCH</span>
+    <span class="lvl avoid">AVOID CHASE</span>
+    <span class="lvl ignore">IGNORE</span>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Direction Indicators</h2>
+  <div class="badge-row">
+    <span class="dir bull">🚀 BULLISH</span>
+    <span class="dir bear">🔴 BEARISH</span>
+    <span class="dir neut">⚪ NEUTRAL</span>
+    <span class="dir unclear">❓ UNCLEAR</span>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Source Tier Badges</h2>
+  <div class="badge-row">
+    <span class="tier t1">TIER 1 — Official</span>
+    <span class="tier t2">TIER 2 — Secondary</span>
+    <span class="tier fb">FALLBACK</span>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Pipeline / Poll Run Status</h2>
+  <div class="badge-row">
+    <span class="ps succeeded">SUCCEEDED</span>
+    <span class="ps degraded">DEGRADED</span>
+    <span class="ps failed">FAILED</span>
+    <span class="ps started">STARTED</span>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Document Processing Status</h2>
+  <div class="badge-row">
+    <span class="proc succeeded">SUCCEEDED</span>
+    <span class="proc pending">PENDING</span>
+    <span class="proc failed">FAILED</span>
+    <span class="proc invalid">INVALID</span>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Event Type Tags</h2>
+  <div class="badge-row">
+    <span class="ev">presidential_positive_mention</span>
+    <span class="ev">presidential_negative_mention</span>
+    <span class="ev">government_funding</span>
+    <span class="ev">government_equity_stake</span>
+    <span class="ev">government_contract</span>
+    <span class="ev">regulatory_tailwind</span>
+    <span class="ev">regulatory_headwind</span>
+    <span class="ev">oge_purchase_disclosure</span>
+    <span class="ev">oge_sale_disclosure</span>
+    <span class="ev">company_confirmation_8k</span>
+    <span class="ev">sector_only_mention</span>
+    <span class="ev">irrelevant</span>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Catalyst Score — Dot Scale (0–5)</h2>
+  <div class="score-demo">
+    <div class="score-ex">
+      <div class="score-dots"><div class="sdot off"></div><div class="sdot off"></div><div class="sdot off"></div><div class="sdot off"></div><div class="sdot off"></div></div>
+      <div class="score-n">0</div>
+    </div>
+    <div class="score-ex">
+      <div class="score-dots"><div class="sdot on"></div><div class="sdot off"></div><div class="sdot off"></div><div class="sdot off"></div><div class="sdot off"></div></div>
+      <div class="score-n">1</div>
+    </div>
+    <div class="score-ex">
+      <div class="score-dots"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot off"></div><div class="sdot off"></div><div class="sdot off"></div></div>
+      <div class="score-n">2</div>
+    </div>
+    <div class="score-ex">
+      <div class="score-dots"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot off"></div><div class="sdot off"></div></div>
+      <div class="score-n">3</div>
+    </div>
+    <div class="score-ex">
+      <div class="score-dots"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot off"></div></div>
+      <div class="score-n">4</div>
+    </div>
+    <div class="score-ex">
+      <div class="score-dots"><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div><div class="sdot on"></div></div>
+      <div class="score-n">5</div>
+    </div>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Color Palette</h2>
+  <div class="palette">
+    <div class="color-chip"><div class="chip-swatch" style="background:#0d1117"></div><div class="chip-label">bg<br>#0d1117</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#161b22"></div><div class="chip-label">surface<br>#161b22</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#21262d"></div><div class="chip-label">border<br>#21262d</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#e6edf3"></div><div class="chip-label">text<br>#e6edf3</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#8b949e"></div><div class="chip-label">muted<br>#8b949e</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#3fb950"></div><div class="chip-label">tradeable<br>#3fb950</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#e3b341"></div><div class="chip-label">review<br>#e3b341</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#388bfd"></div><div class="chip-label">watch<br>#388bfd</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#db6d28"></div><div class="chip-label">avoid<br>#db6d28</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#f85149"></div><div class="chip-label">bearish<br>#f85149</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#79c0ff"></div><div class="chip-label">tier1<br>#79c0ff</div></div>
+    <div class="color-chip"><div class="chip-swatch" style="background:#d2a8ff"></div><div class="chip-label">tier2<br>#d2a8ff</div></div>
+  </div>
+</div>
+
+<div class="group">
+  <h2>Typography Scale</h2>
+  <div class="type-specimen">
+    <div class="ts-row">
+      <div class="ts-label">ticker / mono 26px</div>
+      <div class="ts-example" style="font-family:var(--font-mono);font-size:26px;font-weight:900;color:var(--bullish)">$NVDA</div>
+    </div>
+    <div class="ts-row">
+      <div class="ts-label">page title 16px</div>
+      <div class="ts-example" style="font-size:16px;font-weight:600">Open Positions</div>
+    </div>
+    <div class="ts-row">
+      <div class="ts-label">panel title 13px</div>
+      <div class="ts-example" style="font-size:13px;font-weight:600">Recent Alerts</div>
+    </div>
+    <div class="ts-row">
+      <div class="ts-label">body 13px</div>
+      <div class="ts-example" style="font-size:13px;color:var(--text-muted)">DoD awarded Nvidia a $600M sole-source contract.</div>
+    </div>
+    <div class="ts-row">
+      <div class="ts-label">mono data 12px</div>
+      <div class="ts-example" style="font-family:var(--font-mono);font-size:12px;color:var(--text-muted)">latency 45s · published 14:22 UTC</div>
+    </div>
+    <div class="ts-row">
+      <div class="ts-label">label / tag 10px</div>
+      <div class="ts-example" style="font-family:var(--font-mono);font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-dim)">CATALYST SCORE</div>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>

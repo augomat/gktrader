@@ -1,0 +1,1 @@
+{"version":3,"file":"recent-alerts.d.ts","sourceRoot":"","sources":["../../src/tools/recent-alerts.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,wBAAwB,EAAE,MAAM,kBAAkB,CAAC;AACjE,OAAO,EAAE,kBAAkB,EAAE,MAAM,eAAe,CAAC;AAGnD,eAAO,MAAM,gBAAgB,EAAE,wBAAwB,CACrD;IAAE,UAAU,EAAE,MAAM,CAAC;IAAC,YAAY,EAAE,MAAM,CAAA;CAAE,EAC5C,OAAO,kBAAkB,CAmB1B,CAAC"}

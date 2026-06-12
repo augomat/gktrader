@@ -1,0 +1,21 @@
+{% for src in health %}
+<div class="src-card">
+  <div class="src-accent {{ src.status }}"></div>
+  <div class="src-body">
+    <div class="src-name">{{ src.source_name }}</div>
+    <div class="src-tier-row">
+      <span class="tier-badge {% if src.source_tier == 'tier_1' %}t1{% else %}t2{% endif %}">
+        {% if src.source_tier == 'tier_1' %}T1{% else %}T2{% endif %}
+      </span>
+      <div class="enabled-dot {% if not src.enabled %}off{% endif %}"></div>
+    </div>
+    <div class="src-stat"><span class="stat-key">interval</span><span class="stat-val">{{ src.poll_interval_seconds }}s</span></div>
+    <div class="src-stat"><span class="stat-key">last poll</span><span class="stat-val {% if src.status == 'succeeded' %}ok{% elif src.status == 'degraded' %}warn{% elif src.status == 'failed' %}err{% endif %}">{{ src.last_poll_age }}</span></div>
+    <div class="src-stat"><span class="stat-key">new docs</span><span class="stat-val {% if src.new_count > 0 %}ok{% endif %}">{% if src.new_count %}{{ src.new_count }}{% else %}—{% endif %}</span></div>
+    <div class="src-stat"><span class="stat-key">errors</span><span class="stat-val {% if src.errors %}err{% endif %}">{{ src.errors|length if src.errors else 0 }}</span></div>
+    <div class="src-status-bar {{ src.status }}">{{ src.status|upper }}</div>
+  </div>
+</div>
+{% else %}
+<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--text-dim);font-size:13px">No sources configured yet.</div>
+{% endfor %}

@@ -1,0 +1,1 @@
+{"version":3,"file":"get-alert.d.ts","sourceRoot":"","sources":["../../src/tools/get-alert.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,wBAAwB,EAAE,MAAM,kBAAkB,CAAC;AACjE,OAAO,EAAE,cAAc,EAAE,MAAM,eAAe,CAAC;AAG/C,eAAO,MAAM,YAAY,EAAE,wBAAwB,CACjD;IAAE,UAAU,EAAE,MAAM,CAAC;IAAC,YAAY,EAAE,MAAM,CAAA;CAAE,EAC5C,OAAO,cAAc,CAmBtB,CAAC"}

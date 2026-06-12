@@ -1,0 +1,1 @@
+{"version":3,"file":"confirm-position.d.ts","sourceRoot":"","sources":["../../src/tools/confirm-position.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,wBAAwB,EAAE,MAAM,kBAAkB,CAAC;AACjE,OAAO,EAAE,qBAAqB,EAAE,MAAM,eAAe,CAAC;AAGtD,eAAO,MAAM,mBAAmB,EAAE,wBAAwB,CACxD;IAAE,UAAU,EAAE,MAAM,CAAC;IAAC,YAAY,EAAE,MAAM,CAAA;CAAE,EAC5C,OAAO,qBAAqB,CA4B7B,CAAC"}

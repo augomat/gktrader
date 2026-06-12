@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>SEC EDGAR 8-K Current Report Feed</title>
+  <link href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&amp;type=8-K"/>
+  <entry>
+    <title>8-K: Apple Inc. files current report regarding government contract award</title>
+    <link href="https://www.sec.gov/Archives/edgar/data/320193/0000320193-24-000123-index.html"/>
+    <id>urn:tag:sec.gov,2024:320193-0000320193-24-000123</id>
+    <published>2024-06-10T16:30:00Z</published>
+    <updated>2024-06-10T16:35:00Z</updated>
+    <summary>Apple Inc. filed a Form 8-K reporting a material definitive agreement with a federal agency for the supply of custom semiconductor components valued at over $500 million.</summary>
+    <category term="8-K" label="8-K"/>
+  </entry>
+  <entry>
+    <title>8-K: Raytheon Technologies discloses government contract termination</title>
+    <link href="https://www.sec.gov/Archives/edgar/data/1047122/0001047122-24-000456-index.html"/>
+    <id>urn:tag:sec.gov,2024:1047122-0001047122-24-000456</id>
+    <published>2024-06-10T14:00:00Z</published>
+    <updated>2024-06-10T14:10:00Z</updated>
+    <summary>Raytheon Technologies Corporation filed a Form 8-K disclosing the termination of a material government defense contract worth approximately $1.2 billion due to budget reallocation.</summary>
+    <category term="8-K" label="8-K"/>
+  </entry>
+  <entry>
+    <title>8-K: Tesla Inc. reports change in board composition</title>
+    <link href="https://www.sec.gov/Archives/edgar/data/1318605/0001318605-24-000789-index.html"/>
+    <id>urn:tag:sec.gov,2024:1318605-0001318605-24-000789</id>
+    <published>2024-06-09T20:00:00Z</published>
+    <updated>2024-06-09T20:05:00Z</updated>
+    <summary>Tesla Inc. filed a Form 8-K regarding a change in board composition under Item 5.02. No government-related matters were disclosed.</summary>
+    <category term="8-K" label="8-K"/>
+  </entry>
+</feed>
