@@ -80,6 +80,12 @@ def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _as_utc(dt: datetime) -> datetime:
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 # ---------------------------------------------------------------------------
 # Pipeline result types
 # ---------------------------------------------------------------------------
@@ -97,6 +103,7 @@ class IngestResult:
     raw_document_ids: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
     is_first_poll: bool = False
+    skipped: bool = False
 
 
 @dataclass
@@ -283,12 +290,6 @@ class SignalPipeline:
             if adapter is None:
                 continue
 
-            result = IngestResult(source_name=name, status=PollRunStatus.STARTED)
-            poll_run = SourcePollRun(source_name=name, status=PollRunStatus.STARTED)
-            self.db.add(poll_run)
-            self.db.flush()
-            result.poll_run_id = poll_run.id
-
             # Get or create source definition
             source_def = self.db.query(SourceDefinition).filter_by(source_name=name).first()
             if not source_def:
@@ -299,11 +300,30 @@ class SignalPipeline:
                 )
                 self.db.add(source_def)
                 self.db.flush()
+            elif source_def.poll_interval_seconds != adapter.poll_interval_seconds:
+                source_def.poll_interval_seconds = adapter.poll_interval_seconds
+                self.db.flush()
 
             # Get cursor — absence means this is the first poll for this source
             cursor = self.db.query(SourceCursor).filter_by(source_name=name).first()
             is_first_poll = cursor is None
+            if self._should_skip_source_poll(source_def, cursor):
+                results.append(
+                    IngestResult(
+                        source_name=name,
+                        status=PollRunStatus.SUCCEEDED,
+                        is_first_poll=is_first_poll,
+                        skipped=True,
+                    )
+                )
+                continue
+
+            result = IngestResult(source_name=name, status=PollRunStatus.STARTED)
             result.is_first_poll = is_first_poll
+            poll_run = SourcePollRun(source_name=name, status=PollRunStatus.STARTED)
+            self.db.add(poll_run)
+            self.db.flush()
+            result.poll_run_id = poll_run.id
 
             try:
                 fetch_path: str = "unknown"
@@ -321,6 +341,14 @@ class SignalPipeline:
                 new_count = 0
                 for item in index_result.items:
                     try:
+                        # Skip the detail HTTP fetch entirely if already stored
+                        if (
+                            self.db.query(RawDocument)
+                            .filter_by(source_name=name, external_id=item.external_id)
+                            .first()
+                        ) is not None:
+                            continue
+
                         raw = adapter.fetch_detail(item)
                         doc = adapter.normalize(raw)
                         if doc is None:
@@ -330,7 +358,7 @@ class SignalPipeline:
                         content_hash = _hash_text(doc.text)
                         correlation_id = _uuid()[:12]
 
-                        # Check for existing document
+                        # Check for exact content duplicate
                         existing = (
                             self.db.query(RawDocument)
                             .filter_by(
@@ -341,7 +369,6 @@ class SignalPipeline:
                             .first()
                         )
                         if existing is not None:
-                            # Already stored — skip
                             continue
 
                         raw_doc = RawDocument(
@@ -400,6 +427,39 @@ class SignalPipeline:
             results.append(result)
 
         return results
+
+    def _should_skip_source_poll(
+        self,
+        source_def: SourceDefinition,
+        cursor: SourceCursor | None,
+    ) -> bool:
+        if not source_def.enabled:
+            return True
+        last_polled_at = self._get_last_polled_at(source_def.source_name, cursor)
+        if last_polled_at is None:
+            return False
+        next_due_at = last_polled_at + timedelta(
+            seconds=source_def.poll_interval_seconds
+        )
+        return _as_utc(self._now()) < next_due_at
+
+    def _get_last_polled_at(
+        self,
+        source_name: str,
+        cursor: SourceCursor | None,
+    ) -> datetime | None:
+        latest_run = (
+            self.db.query(SourcePollRun)
+            .filter_by(source_name=source_name)
+            .order_by(SourcePollRun.started_at.desc())
+            .first()
+        )
+        if latest_run is not None:
+            last_polled_at = latest_run.ended_at or latest_run.started_at
+            return _as_utc(last_polled_at)
+        if cursor is None or cursor.last_successful_poll is None:
+            return None
+        return _as_utc(cursor.last_successful_poll)
 
     # ------------------------------------------------------------------
     # Document processing stage

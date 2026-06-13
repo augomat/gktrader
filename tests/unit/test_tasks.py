@@ -26,6 +26,8 @@ from gktrader.db.models import (
     ProcessingRun,
     RawDocument,
     SignalEvent,
+    SourceCursor,
+    SourceDefinition,
     SourcePollRun,
     InteractionState,
     Position,
@@ -71,6 +73,33 @@ def _db_uuid() -> str:
 
 def _now() -> datetime:
     return datetime(2026, 6, 12, 14, 30, 0, tzinfo=timezone.utc)
+
+
+class _FakeRedisLock:
+    def __init__(self, state: dict[str, bool], name: str):
+        self._state = state
+        self._name = name
+        self._owned = False
+
+    def acquire(self, blocking: bool = False) -> bool:
+        if self._state.get(self._name):
+            return False
+        self._state[self._name] = True
+        self._owned = True
+        return True
+
+    def release(self) -> None:
+        if self._owned:
+            self._state[self._name] = False
+            self._owned = False
+
+
+class _FakeRedisClient:
+    def __init__(self):
+        self._state: dict[str, bool] = {}
+
+    def lock(self, name: str, timeout: int | None = None, blocking: bool = False) -> _FakeRedisLock:
+        return _FakeRedisLock(self._state, name)
 
 
 def _make_settings(**overrides: Any) -> Settings:
@@ -279,6 +308,7 @@ def _build_pipeline(
     snapshot_fn=None,
     deliver_fn=None,
     continue_deliver_fn=None,
+    now_fn=None,
 ) -> SignalPipeline:
     settings = _make_settings()
     adapter = _MockSourceAdapter(mock_docs or [])
@@ -292,7 +322,7 @@ def _build_pipeline(
         snapshot_fn=snapshot_fn or (lambda t: _make_market_snapshot(t)),
         deliver_fn=deliver_fn or (lambda s, c, p: DeliveryStatus.SENT),
         continue_deliver_fn=continue_deliver_fn or (lambda s, c, m: [DeliveryStatus.SENT]),
-        now_fn=_now,
+        now_fn=now_fn or _now,
     )
 
 
@@ -329,7 +359,11 @@ class TestIngestSources:
         assert results1[0].new_documents == 1
 
         # Second ingestion — same doc should be skipped
-        results2 = pipeline.ingest_sources()
+        def later_now() -> datetime:
+            return _now() + timedelta(seconds=61)
+
+        pipeline_later = _build_pipeline(db_session, resolver, [doc], now_fn=later_now)
+        results2 = pipeline_later.ingest_sources()
         db_session.commit()
         assert results2[0].new_documents == 0
 
@@ -360,6 +394,78 @@ class TestIngestSources:
         cursor = db_session.query(SourceCursor).filter_by(source_name="mock_source").first()
         assert cursor is not None
         assert cursor.last_successful_poll is not None
+
+    def test_ingest_skips_source_until_due(self, db_session, resolver):
+        doc = _make_mock_doc()
+        pipeline = _build_pipeline(db_session, resolver, [doc], now_fn=_now)
+
+        first_results = pipeline.ingest_sources()
+        assert first_results[0].skipped is False
+        assert first_results[0].new_documents == 1
+
+        second_results = pipeline.ingest_sources()
+        db_session.commit()
+
+        assert second_results[0].skipped is True
+        assert second_results[0].new_documents == 0
+
+        runs = db_session.query(SourcePollRun).all()
+        assert len(runs) == 1
+
+    def test_ingest_refreshes_persisted_poll_interval_from_adapter(self, db_session, resolver):
+        source_def = SourceDefinition(
+            source_name="mock_source",
+            source_tier=SourceTier.TIER_1,
+            poll_interval_seconds=60,
+        )
+        cursor = SourceCursor(
+            source_name="mock_source",
+            last_successful_poll=_now() - timedelta(seconds=61),
+        )
+        db_session.add(source_def)
+        db_session.add(cursor)
+        db_session.commit()
+
+        doc = _make_mock_doc()
+
+        def later_now() -> datetime:
+            return _now() + timedelta(minutes=2)
+
+        pipeline = _build_pipeline(db_session, resolver, [doc], now_fn=later_now)
+        pipeline.adapters["mock_source"].poll_interval_seconds = 600
+
+        results = pipeline.ingest_sources()
+        db_session.commit()
+
+        refreshed = db_session.query(SourceDefinition).filter_by(source_name="mock_source").one()
+        assert refreshed.poll_interval_seconds == 600
+        assert results[0].skipped is True
+
+    def test_failed_poll_is_still_rate_limited_until_due(self, db_session, resolver):
+        class _FailingMockSourceAdapter(_MockSourceAdapter):
+            def fetch_index(
+                self,
+                cursor: str | None = None,
+                conditional_headers: dict[str, str] | None = None,
+            ) -> FetchIndexResult:
+                raise RuntimeError("cm4 endpoint down")
+
+        pipeline = _build_pipeline(db_session, resolver, [], now_fn=_now)
+        pipeline.adapters["mock_source"] = _FailingMockSourceAdapter()
+
+        first_results = pipeline.ingest_sources()
+        db_session.commit()
+
+        assert first_results[0].status == PollRunStatus.FAILED
+        assert first_results[0].skipped is False
+
+        second_results = pipeline.ingest_sources()
+        db_session.commit()
+
+        assert second_results[0].skipped is True
+
+        runs = db_session.query(SourcePollRun).all()
+        assert len(runs) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -797,6 +903,50 @@ class TestPollSourcesTask:
 
         assert callable(deliver_pending_alerts)
         assert hasattr(deliver_pending_alerts, "name")
+
+    def test_poll_sources_skips_when_lock_is_held(self, monkeypatch):
+        from gktrader.tasks import jobs
+
+        fake_redis = _FakeRedisClient()
+        settings = _make_settings(redis_url="redis://unused:6379/0")
+        held_lock = fake_redis.lock("gktrader:poll_sources:lock", timeout=900, blocking=False)
+        assert held_lock.acquire(blocking=False) is True
+
+        monkeypatch.setattr(jobs, "get_settings", lambda: settings)
+        monkeypatch.setattr(jobs, "_get_redis_client", lambda current_settings: fake_redis)
+
+        result = jobs.poll_sources.run()
+
+        assert result["status"] == "skipped"
+        assert result["reason"] == "another poll_sources run is still active"
+        held_lock.release()
+
+    def test_poll_sources_releases_lock_after_completion(self, monkeypatch):
+        from gktrader.tasks import jobs
+
+        fake_redis = _FakeRedisClient()
+        settings = _make_settings(redis_url="redis://unused:6379/0")
+
+        monkeypatch.setattr(jobs, "get_settings", lambda: settings)
+        monkeypatch.setattr(jobs, "_get_redis_client", lambda current_settings: fake_redis)
+        monkeypatch.setattr(jobs, "_build_pipeline", lambda: object())
+        monkeypatch.setattr(
+            jobs,
+            "_run_in_session",
+            lambda pipeline: PipelineResult(
+                ingest_results=[],
+                processing_results=[],
+                signal_results=[],
+                alert_results=[],
+            ),
+        )
+
+        result = jobs.poll_sources.run()
+        second_lock = fake_redis.lock("gktrader:poll_sources:lock", timeout=900, blocking=False)
+
+        assert result["status"] == "completed"
+        assert second_lock.acquire(blocking=False) is True
+        second_lock.release()
 
 
 # ---------------------------------------------------------------------------
@@ -1626,7 +1776,11 @@ class TestCooldownFixes:
             return _make_classifier_result(direction="bearish")
 
         pipeline2 = _build_pipeline(
-            db_session, resolver, [doc_bear], classify_fn=_bearish_classify,
+            db_session,
+            resolver,
+            [doc_bear],
+            classify_fn=_bearish_classify,
+            now_fn=lambda: _now() + timedelta(seconds=61),
         )
         pipeline2.ingest_sources()
         raw_ids = [
@@ -1765,7 +1919,7 @@ class TestFirstStartBaseline:
             snapshot_fn=lambda t: _make_market_snapshot(t),
             deliver_fn=lambda s, c, p: DeliveryStatus.SENT,
             continue_deliver_fn=lambda s, c, m: [DeliveryStatus.SENT],
-            now_fn=_now,
+            now_fn=lambda: _now() + timedelta(seconds=61),
         )
         pipeline2.run_full_pipeline()
         db_session.commit()

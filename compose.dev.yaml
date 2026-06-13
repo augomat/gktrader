@@ -1,0 +1,29 @@
+services:
+  migrate:
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+
+  api:
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+
+  worker:
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
+      - ./tests:/app/tests
+
+  scheduler:
+    volumes:
+      - ./src:/app/src
+      - ./migrations:/app/migrations
+      - ./alembic.ini:/app/alembic.ini:ro
+      - ./pyproject.toml:/app/pyproject.toml:ro
