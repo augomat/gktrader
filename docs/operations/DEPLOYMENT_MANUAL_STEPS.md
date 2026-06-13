@@ -74,7 +74,7 @@ The `migrate` service runs once and exits 0; that is expected, not an error.
 ```bash
 docker compose ps                              # migrate = Exited(0); others Up
 docker compose logs migrate                     # should show "Running upgrade -> 0001_initial"
-curl -s http://127.0.0.1:8787/healthz           # API on loopback
+curl -s http://127.0.0.1:${API_HOST_PORT:-8788}/healthz   # API on loopback
 docker compose logs -f worker                    # watch a poll cycle
 ```
 
@@ -133,7 +133,7 @@ is **outside Docker** (OpenClaw runs on the host):
   account; bind it to a dedicated `gktrader-agent`; allowlist only owner ID
   `324974555`; disable group access; minimal tool allowlist (no shell/browser/broker).
 - Install/configure the `openclaw-gktrader` plugin (`integrations/openclaw-gktrader/`)
-  to call the loopback API at `http://127.0.0.1:8787` with
+  to call the loopback API at `http://127.0.0.1:${API_HOST_PORT:-8788}` with
   `GKTRADER_INTERNAL_API_SHARED_SECRET`.
 - Confirm OpenClaw is the **only** process polling `getUpdates` for this token; the
   Python backend must only ever call `sendMessage` (it does).
@@ -172,7 +172,7 @@ docker compose up -d
 
 # 3. verify
 docker compose ps
-curl -s http://127.0.0.1:8787/healthz
+curl -s http://127.0.0.1:${API_HOST_PORT:-8788}/healthz
 docker compose logs -f worker
 
 # 4. then do the OpenClaw bot/plugin setup on the host (§2e)

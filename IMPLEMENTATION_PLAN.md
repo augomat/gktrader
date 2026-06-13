@@ -215,7 +215,7 @@ Scheduler
 
 OpenClaw remains a host service outside Docker Compose.
 
-Bind the internal API to loopback only, for example `127.0.0.1:8787:8000`. Require a shared-secret authorization header even on loopback.
+Bind the internal API to loopback only, for example `127.0.0.1:8788:8000`. Require a shared-secret authorization header even on loopback.
 
 ### Architectural Principles
 
@@ -1400,4 +1400,3 @@ The MVP is done only when:
 ### Local Reuse Reference
 
 - Existing OpenClaw source and local documentation: `/home/openclaw/src/openclaw`
-
