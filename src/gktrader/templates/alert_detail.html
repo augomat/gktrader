@@ -37,6 +37,32 @@
 .market-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
 .market-stat .market-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
 .market-stat .market-val { font-family: var(--font-mono); font-size: 16px; font-weight: 700; }
+.market-chart { margin-top: 18px; border-top: 1px solid var(--border); padding-top: 16px; }
+.chart-topline { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.chart-caption { font-size: 12px; color: var(--text-muted); }
+.chart-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+.chart-range-link { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-decoration: none; padding: 5px 8px; border: 1px solid var(--border-muted); border-radius: 999px; }
+.chart-range-link:hover { color: var(--text); border-color: var(--watch); }
+.chart-range-link.active { color: var(--watch); border-color: rgba(56,139,253,.45); background: rgba(56,139,253,.08); }
+.chart-shell { border: 1px solid var(--border); border-radius: 8px; background: linear-gradient(180deg, rgba(28,33,40,.95), rgba(13,17,23,.98)); padding: 14px; }
+.chart-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.chart-summary-item { min-width: 0; }
+.chart-summary-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
+.chart-summary-value { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+.chart-meta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
+.chart-svg-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: rgba(13,17,23,.9); }
+.chart-svg { width: 100%; height: 240px; display: block; }
+.chart-grid { stroke: rgba(139,148,158,.16); stroke-width: 1; }
+.chart-path { fill: none; stroke: var(--watch); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.chart-event-line { stroke-width: 1; opacity: .7; }
+.chart-event-line.tradeable { stroke: var(--tradeable); }
+.chart-event-line.review { stroke: var(--review); }
+.chart-event-line.watch { stroke: var(--watch); }
+.chart-event-line.avoid { stroke: var(--avoid); }
+.chart-event-line.ignore { stroke: var(--ignore); }
+.chart-event-line.focus { stroke: #f0f6fc; stroke-width: 2.5; stroke-dasharray: 5 4; opacity: 1; }
+.chart-axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+.chart-note, .chart-empty { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
 .action-section { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 16px; }
 .action-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
 .action-title { font-size: 12px; font-weight: 600; color: var(--text-muted); margin-bottom: 12px; text-transform: uppercase; letter-spacing: .05em; font-family: var(--font-mono); }
@@ -45,6 +71,14 @@
 .action-form-row input { flex: 1; }
 .action-buttons { display: flex; gap: 8px; margin-top: 12px; }
 .action-buttons .btn { flex: 1; text-align: center; }
+@media (max-width: 900px) {
+  .score-row { grid-template-columns: repeat(2, 1fr); }
+  .header-body { flex-direction: column; }
+  .header-meta { text-align: left; }
+  .market-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .chart-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .action-section { grid-template-columns: 1fr; }
+}
 {% endblock %}
 
 {% block content %}
@@ -126,10 +160,11 @@
 </div>
 {% endif %}
 
-{% if alert.market %}
+{% if alert.market or alert.chart %}
 <div class="section">
   <div class="section-header"><span class="section-icon">📈</span><span class="section-title">Market Context — IEX Partial-Market Data</span></div>
   <div class="section-body">
+    {% if alert.market %}
     <div class="market-grid">
       <div class="market-stat">
         <div class="market-label">Price</div>
@@ -162,6 +197,67 @@
       </div>
       {% endif %}
     </div>
+    {% else %}
+    <div class="chart-empty">No stored point-in-time market snapshot was captured for this alert.</div>
+    {% endif %}
+
+    {% if alert.chart %}
+    <div class="market-chart">
+      <div class="chart-topline">
+        <div class="chart-caption">On-demand Alpaca {{ alert.chart.timeframe }} bars with all stored stock events overlaid.</div>
+        <div class="chart-controls">
+          {% for option in alert.chart.ranges %}
+          <a href="/ui/alerts/{{ alert.id }}?range={{ option.key }}" class="chart-range-link {% if option.selected %}active{% endif %}">{{ option.label }}</a>
+          {% endfor %}
+        </div>
+      </div>
+
+      {% if alert.chart.available %}
+      <div class="chart-shell">
+        <div class="chart-summary">
+          <div class="chart-summary-item"><div class="chart-summary-label">Start</div><div class="chart-summary-value">{{ "%.2f"|format(alert.chart.first_close) }}</div></div>
+          <div class="chart-summary-item"><div class="chart-summary-label">End</div><div class="chart-summary-value">{{ "%.2f"|format(alert.chart.last_close) }}</div></div>
+          <div class="chart-summary-item"><div class="chart-summary-label">Range Move</div><div class="chart-summary-value {% if alert.chart.move_pct and alert.chart.move_pct > 0 %}green{% elif alert.chart.move_pct %}red{% endif %}">{{ alert.chart.move_pct_label }}</div></div>
+          <div class="chart-summary-item"><div class="chart-summary-label">Low</div><div class="chart-summary-value">{{ "%.2f"|format(alert.chart.low_price) }}</div></div>
+          <div class="chart-summary-item"><div class="chart-summary-label">High</div><div class="chart-summary-value">{{ "%.2f"|format(alert.chart.high_price) }}</div></div>
+        </div>
+        <div class="chart-meta">
+          <div>{{ alert.chart.visible_event_count }} visible / {{ alert.chart.total_event_count }} total stored stock events</div>
+          <div>{{ alert.chart.start_at.strftime('%Y-%m-%d %H:%M UTC') }} → {{ alert.chart.end_at.strftime('%Y-%m-%d %H:%M UTC') }}</div>
+        </div>
+        <div class="chart-svg-wrap">
+          <svg viewBox="0 0 {{ alert.chart.width }} {{ alert.chart.height }}" preserveAspectRatio="none" class="chart-svg" role="img" aria-label="{{ alert.ticker }} price chart">
+            <line x1="0" y1="0" x2="{{ alert.chart.width }}" y2="0" class="chart-grid"></line>
+            <line x1="0" y1="73.33" x2="{{ alert.chart.width }}" y2="73.33" class="chart-grid"></line>
+            <line x1="0" y1="146.66" x2="{{ alert.chart.width }}" y2="146.66" class="chart-grid"></line>
+            <line x1="0" y1="{{ alert.chart.height }}" x2="{{ alert.chart.width }}" y2="{{ alert.chart.height }}" class="chart-grid"></line>
+            {% for ev in alert.chart.event_lines %}
+            <a href="{{ ev.detail_url or '#' }}">
+              <line x1="{{ ev.x }}" y1="0" x2="{{ ev.x }}" y2="{{ alert.chart.height }}" class="chart-event-line {{ level_css.get(ev.level|upper, 'ignore') }}">
+                <title>{{ ev.occurred_at.strftime('%Y-%m-%d %H:%M UTC') }} · {{ ev.event_type|replace('_', ' ') }} · {{ ev.level|replace('_', ' ') }} · {{ ev.title }}</title>
+              </line>
+            </a>
+            {% endfor %}
+            <polyline points="{{ alert.chart.points_attr }}" class="chart-path"></polyline>
+            {% if alert.chart.focus_visible and alert.chart.focus_x is not none %}
+            <line x1="{{ alert.chart.focus_x }}" y1="0" x2="{{ alert.chart.focus_x }}" y2="{{ alert.chart.height }}" class="chart-event-line focus">
+              <title>Current alert hit · {{ alert.chart.focus_at.strftime('%Y-%m-%d %H:%M UTC') if alert.chart.focus_at else '—' }}</title>
+            </line>
+            {% endif %}
+          </svg>
+        </div>
+        <div class="chart-axis">
+          <span>{{ alert.chart.start_at.strftime('%Y-%m-%d') }}</span>
+          <span>Current alert · {{ alert.chart.focus_at.strftime('%Y-%m-%d %H:%M UTC') if alert.chart.focus_at else '—' }}</span>
+          <span>{{ alert.chart.end_at.strftime('%Y-%m-%d') }}</span>
+        </div>
+        <div class="chart-note">The white dashed line marks this alert. All stored events for ${{ alert.chart.ticker }} are queried each time; only events inside the selected window are visible on the chart.</div>
+      </div>
+      {% else %}
+      <div class="chart-empty">{{ alert.chart.reason }}</div>
+      {% endif %}
+    </div>
+    {% endif %}
   </div>
 </div>
 {% endif %}

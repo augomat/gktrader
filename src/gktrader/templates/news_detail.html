@@ -31,6 +31,30 @@
 .text-note { margin-bottom: 10px; font-size: 12px; color: var(--review); }
 .evidence-item { background: var(--surface-2); border: 1px solid var(--border-muted); border-left: 3px solid var(--watch); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); line-height: 1.55; }
 .evidence-item:last-child { margin-bottom: 0; }
+.chart-topline { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+.chart-caption { font-size: 12px; color: var(--text-muted); }
+.chart-controls { display: flex; gap: 6px; flex-wrap: wrap; }
+.chart-range-link { font-family: var(--font-mono); font-size: 11px; color: var(--text-muted); text-decoration: none; padding: 5px 8px; border: 1px solid var(--border-muted); border-radius: 999px; }
+.chart-range-link:hover { color: var(--text); border-color: var(--watch); }
+.chart-range-link.active { color: var(--watch); border-color: rgba(56,139,253,.45); background: rgba(56,139,253,.08); }
+.chart-shell { border: 1px solid var(--border); border-radius: 8px; background: linear-gradient(180deg, rgba(28,33,40,.95), rgba(13,17,23,.98)); padding: 14px; }
+.chart-summary { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+.chart-summary-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
+.chart-summary-value { font-family: var(--font-mono); font-size: 13px; color: var(--text); }
+.chart-meta { display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 10px; font-size: 11px; color: var(--text-dim); font-family: var(--font-mono); }
+.chart-svg-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: rgba(13,17,23,.9); }
+.chart-svg { width: 100%; height: 240px; display: block; }
+.chart-grid { stroke: rgba(139,148,158,.16); stroke-width: 1; }
+.chart-path { fill: none; stroke: var(--watch); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.chart-event-line { stroke-width: 1; opacity: .7; }
+.chart-event-line.tradeable { stroke: var(--tradeable); }
+.chart-event-line.review { stroke: var(--review); }
+.chart-event-line.watch { stroke: var(--watch); }
+.chart-event-line.avoid { stroke: var(--avoid); }
+.chart-event-line.ignore { stroke: var(--ignore); }
+.chart-event-line.focus { stroke: #f0f6fc; stroke-width: 2.5; stroke-dasharray: 5 4; opacity: 1; }
+.chart-axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+.chart-note, .chart-empty { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
 .meta-list { display: flex; flex-direction: column; gap: 8px; }
 .meta-row { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; font-family: var(--font-mono); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
 .meta-row:last-child { border-bottom: none; padding-bottom: 0; }
@@ -41,6 +65,7 @@
   .detail-grid { grid-template-columns: 1fr; }
   .header-body { flex-direction: column; }
   .header-meta { text-align: left; }
+  .chart-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 {% endblock %}
 
@@ -124,6 +149,65 @@
       <div class="detail-item"><div class="detail-label">Action Status</div><div class="detail-value">{{ news.action_status or '—' }}</div></div>
       <div class="detail-item"><div class="detail-label">Relevant</div><div class="detail-value">{{ news.relevant if news.relevant is not none else '—' }}</div></div>
     </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-title">Market Context — IEX Partial-Market Data</span></div>
+  <div class="section-body">
+    <div class="chart-topline">
+      <div class="chart-caption">On-demand Alpaca {{ news.chart.timeframe }} bars with all stored stock events overlaid.</div>
+      <div class="chart-controls">
+        {% for option in news.chart.ranges %}
+        <a href="/ui/news/{{ news.id }}?range={{ option.key }}" class="chart-range-link {% if option.selected %}active{% endif %}">{{ option.label }}</a>
+        {% endfor %}
+      </div>
+    </div>
+
+    {% if news.chart.available %}
+    <div class="chart-shell">
+      <div class="chart-summary">
+        <div><div class="chart-summary-label">Start</div><div class="chart-summary-value">{{ "%.2f"|format(news.chart.first_close) }}</div></div>
+        <div><div class="chart-summary-label">End</div><div class="chart-summary-value">{{ "%.2f"|format(news.chart.last_close) }}</div></div>
+        <div><div class="chart-summary-label">Range Move</div><div class="chart-summary-value {% if news.chart.move_pct and news.chart.move_pct > 0 %}green{% elif news.chart.move_pct %}red{% endif %}">{{ news.chart.move_pct_label }}</div></div>
+        <div><div class="chart-summary-label">Low</div><div class="chart-summary-value">{{ "%.2f"|format(news.chart.low_price) }}</div></div>
+        <div><div class="chart-summary-label">High</div><div class="chart-summary-value">{{ "%.2f"|format(news.chart.high_price) }}</div></div>
+      </div>
+      <div class="chart-meta">
+        <div>{{ news.chart.visible_event_count }} visible / {{ news.chart.total_event_count }} total stored stock events</div>
+        <div>{{ news.chart.start_at.strftime('%Y-%m-%d %H:%M UTC') }} → {{ news.chart.end_at.strftime('%Y-%m-%d %H:%M UTC') }}</div>
+      </div>
+      <div class="chart-svg-wrap">
+        <svg viewBox="0 0 {{ news.chart.width }} {{ news.chart.height }}" preserveAspectRatio="none" class="chart-svg" role="img" aria-label="{{ news.ticker }} price chart">
+          <line x1="0" y1="0" x2="{{ news.chart.width }}" y2="0" class="chart-grid"></line>
+          <line x1="0" y1="73.33" x2="{{ news.chart.width }}" y2="73.33" class="chart-grid"></line>
+          <line x1="0" y1="146.66" x2="{{ news.chart.width }}" y2="146.66" class="chart-grid"></line>
+          <line x1="0" y1="{{ news.chart.height }}" x2="{{ news.chart.width }}" y2="{{ news.chart.height }}" class="chart-grid"></line>
+          {% for ev in news.chart.event_lines %}
+          <a href="{{ ev.detail_url or '#' }}">
+            <line x1="{{ ev.x }}" y1="0" x2="{{ ev.x }}" y2="{{ news.chart.height }}" class="chart-event-line {{ level_css.get(ev.level|upper, 'ignore') }}">
+              <title>{{ ev.occurred_at.strftime('%Y-%m-%d %H:%M UTC') }} · {{ ev.event_type|replace('_', ' ') }} · {{ ev.level|replace('_', ' ') }} · {{ ev.title }}</title>
+            </line>
+          </a>
+          {% endfor %}
+          <polyline points="{{ news.chart.points_attr }}" class="chart-path"></polyline>
+          {% if news.chart.focus_visible and news.chart.focus_x is not none %}
+          <line x1="{{ news.chart.focus_x }}" y1="0" x2="{{ news.chart.focus_x }}" y2="{{ news.chart.height }}" class="chart-event-line focus">
+            <title>Current news hit · {{ news.chart.focus_at.strftime('%Y-%m-%d %H:%M UTC') if news.chart.focus_at else '—' }}</title>
+          </line>
+          {% endif %}
+        </svg>
+      </div>
+      <div class="chart-axis">
+        <span>{{ news.chart.start_at.strftime('%Y-%m-%d') }}</span>
+        <span>Current news · {{ news.chart.focus_at.strftime('%Y-%m-%d %H:%M UTC') if news.chart.focus_at else '—' }}</span>
+        <span>{{ news.chart.end_at.strftime('%Y-%m-%d') }}</span>
+      </div>
+      <div class="chart-note">The white dashed line marks this news item. All stored events for ${{ news.chart.ticker }} are queried each time; only events inside the selected window are visible on the chart.</div>
+    </div>
+    {% else %}
+    <div class="chart-empty">{{ news.chart.reason }}</div>
+    {% endif %}
   </div>
 </div>
 

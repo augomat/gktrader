@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, Form, Request, status
+from fastapi import APIRouter, Depends, Form, Query, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
@@ -106,10 +106,15 @@ async def dashboard(request: Request, svc: UIService = Depends(_svc)):
 
 
 @router.get("/news/{news_id}", response_class=HTMLResponse)
-async def news_detail(request: Request, news_id: str, svc: UIService = Depends(_svc)):
+async def news_detail(
+    request: Request,
+    news_id: str,
+    range_key: str = Query(default="1W", alias="range"),
+    svc: UIService = Depends(_svc),
+):
     if not _guard(request):
         return RedirectResponse("/ui/login", status_code=303)
-    news = svc.get_news_detail(news_id)
+    news = svc.get_news_detail(news_id, range_key=range_key)
     if not news:
         return HTMLResponse("News item not found", status_code=404)
     return templates.TemplateResponse(request, "news_detail.html", {
@@ -150,10 +155,15 @@ async def alert_feed_partial(request: Request, svc: UIService = Depends(_svc)):
 
 
 @router.get("/alerts/{alert_id}", response_class=HTMLResponse)
-async def alert_detail(request: Request, alert_id: str, svc: UIService = Depends(_svc)):
+async def alert_detail(
+    request: Request,
+    alert_id: str,
+    range_key: str = Query(default="1W", alias="range"),
+    svc: UIService = Depends(_svc),
+):
     if not _guard(request):
         return RedirectResponse("/ui/login", status_code=303)
-    alert = svc.get_alert_detail(alert_id)
+    alert = svc.get_alert_detail(alert_id, range_key=range_key)
     if not alert:
         return HTMLResponse("Alert not found", status_code=404)
     return templates.TemplateResponse(request, "alert_detail.html", {

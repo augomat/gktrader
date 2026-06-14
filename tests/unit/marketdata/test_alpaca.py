@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from datetime import UTC, datetime
 
 import httpx
@@ -13,6 +14,7 @@ from gktrader.domain.enums import MarketStatus
 from gktrader.marketdata.alpaca import AlpacaIEXProvider, IEX_LABEL
 
 _ALPACA_SNAPSHOT_URL = "https://data.alpaca.markets/v2/stocks/AAPL/snapshot?feed=iex"
+_ALPACA_BARS_URL_RE = re.compile(r"https://data\.alpaca\.markets/v2/stocks/bars.*")
 
 
 def _fake_snapshot_json(
@@ -28,6 +30,35 @@ def _fake_snapshot_json(
         "latestTrade": {"p": price, "s": 100, "t": "2026-06-12T14:30:00Z"},
         "prevDailyBar": {"c": prev_close, "h": prev_close + 2, "l": prev_close - 2, "o": prev_close - 1, "v": 8_000_000},
         "dailyBar": {"c": close_price, "h": close_price + 2, "l": open_price - 1, "o": open_price, "v": volume},
+    }
+
+
+def _fake_bars_json() -> dict:
+    return {
+        "bars": {
+            "AAPL": [
+                {
+                    "t": "2026-06-10T13:00:00Z",
+                    "o": 198.5,
+                    "h": 200.0,
+                    "l": 197.9,
+                    "c": 199.8,
+                    "v": 123_456,
+                    "n": 789,
+                    "vw": 199.3,
+                },
+                {
+                    "t": "2026-06-11T13:00:00Z",
+                    "o": 199.8,
+                    "h": 201.2,
+                    "l": 199.0,
+                    "c": 200.4,
+                    "v": 234_567,
+                    "n": 890,
+                    "vw": 200.1,
+                },
+            ]
+        }
     }
 
 
@@ -150,3 +181,22 @@ class TestAlpacaIEXProvider:
     def test_close_method(self) -> None:
         provider = AlpacaIEXProvider(api_key="k", api_secret="s", http_client=httpx.Client())
         provider.close()  # Should not raise
+
+    def test_historical_bars_success(self) -> None:
+        with respx.mock:
+            route = respx.get(_ALPACA_BARS_URL_RE).mock(
+                return_value=httpx.Response(200, json=_fake_bars_json())
+            )
+            provider = AlpacaIEXProvider(api_key="k", api_secret="s", http_client=httpx.Client())
+            bars = provider.historical_bars(
+                "AAPL",
+                start=datetime(2026, 6, 10, tzinfo=UTC),
+                end=datetime(2026, 6, 12, tzinfo=UTC),
+                timeframe="1Day",
+            )
+
+        assert route.called
+        assert len(bars) == 2
+        assert bars[0]["timestamp"] == datetime(2026, 6, 10, 13, 0, tzinfo=UTC)
+        assert bars[0]["close"] == 199.8
+        assert bars[1]["volume"] == 234_567

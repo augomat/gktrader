@@ -319,6 +319,214 @@ def test_get_news_detail_prefers_full_text_from_metadata() -> None:
     assert detail["text_truncated"] is False
 
 
+def test_get_alert_detail_chart_includes_all_stock_events_for_selected_range(monkeypatch) -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+
+    bars = [
+        {
+            "timestamp": datetime(2026, 5, 30, 0, 0, tzinfo=timezone.utc),
+            "open": 11.0,
+            "high": 11.3,
+            "low": 10.8,
+            "close": 11.2,
+            "volume": 1000,
+        },
+        {
+            "timestamp": datetime(2026, 6, 5, 0, 0, tzinfo=timezone.utc),
+            "open": 11.2,
+            "high": 11.7,
+            "low": 11.1,
+            "close": 11.5,
+            "volume": 1200,
+        },
+        {
+            "timestamp": datetime(2026, 6, 10, 0, 0, tzinfo=timezone.utc),
+            "open": 11.5,
+            "high": 12.0,
+            "low": 11.4,
+            "close": 11.9,
+            "volume": 1400,
+        },
+        {
+            "timestamp": datetime(2026, 6, 13, 0, 0, tzinfo=timezone.utc),
+            "open": 11.9,
+            "high": 12.4,
+            "low": 11.8,
+            "close": 12.2,
+            "volume": 1800,
+        },
+    ]
+
+    def fake_fetch_chart_bars(self, ticker: str, *, start, end, timeframe):  # noqa: ANN001
+        assert ticker == "RGTI"
+        assert timeframe == "1Day"
+        return bars
+
+    monkeypatch.setattr(UIService, "_fetch_chart_bars", fake_fetch_chart_bars)
+
+    with Session(engine) as db:
+        older_doc = RawDocument(
+            id=_id(),
+            correlation_id="corr-oldest",
+            source_name="whitehouse",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="rss",
+            external_id="wh-oldest",
+            canonical_url="https://example.com/news/oldest",
+            title="Oldest catalyst",
+            text="Oldest body",
+            content_hash="hash-oldest",
+            published_at=datetime(2026, 6, 1, 12, 0, tzinfo=timezone.utc),
+            detected_at=datetime(2026, 6, 1, 12, 5, tzinfo=timezone.utc),
+            source_metadata={},
+        )
+        older_extracted = ExtractedEvent(
+            id=_id(),
+            raw_document_id=older_doc.id,
+            processing_run_id=_id(),
+            event_payload={"event_type": "government_funding"},
+        )
+        older_signal = SignalEvent(
+            id=_id(),
+            fingerprint="fp-oldest",
+            event_type="government_funding",
+            direction=Direction.BULLISH,
+            action_status="announced",
+            catalyst_score=3,
+            classifier_confidence=0.81,
+            alert_level=AlertLevel.REVIEW,
+            primary_company_id=None,
+            payload={
+                "ticker": "RGTI",
+                "companies": ["Rigetti Computing"],
+                "rationale": "Earlier policy support.",
+                "extracted_event_ids": [older_extracted.id],
+            },
+            published_bucket="2026-06-01",
+            created_at=datetime(2026, 6, 1, 12, 5, tzinfo=timezone.utc),
+        )
+
+        middle_doc = RawDocument(
+            id=_id(),
+            correlation_id="corr-middle",
+            source_name="whitehouse",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="rss",
+            external_id="wh-middle",
+            canonical_url="https://example.com/news/middle",
+            title="Middle catalyst",
+            text="Middle body",
+            content_hash="hash-middle",
+            published_at=datetime(2026, 6, 8, 10, 0, tzinfo=timezone.utc),
+            detected_at=datetime(2026, 6, 8, 10, 5, tzinfo=timezone.utc),
+            source_metadata={},
+        )
+        middle_extracted = ExtractedEvent(
+            id=_id(),
+            raw_document_id=middle_doc.id,
+            processing_run_id=_id(),
+            event_payload={"event_type": "government_funding"},
+        )
+        middle_signal = SignalEvent(
+            id=_id(),
+            fingerprint="fp-middle",
+            event_type="government_funding",
+            direction=Direction.BULLISH,
+            action_status="announced",
+            catalyst_score=4,
+            classifier_confidence=0.88,
+            alert_level=AlertLevel.TRADEABLE,
+            primary_company_id=None,
+            payload={
+                "ticker": "RGTI",
+                "companies": ["Rigetti Computing"],
+                "rationale": "Second catalyst.",
+                "extracted_event_ids": [middle_extracted.id],
+            },
+            published_bucket="2026-06-08",
+            created_at=datetime(2026, 6, 8, 10, 5, tzinfo=timezone.utc),
+        )
+
+        current_doc = RawDocument(
+            id=_id(),
+            correlation_id="corr-current",
+            source_name="whitehouse",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="rss",
+            external_id="wh-current",
+            canonical_url="https://example.com/news/current",
+            title="Current catalyst",
+            text="Current body",
+            content_hash="hash-current",
+            published_at=datetime(2026, 6, 13, 9, 0, tzinfo=timezone.utc),
+            detected_at=datetime(2026, 6, 13, 9, 5, tzinfo=timezone.utc),
+            source_metadata={},
+        )
+        current_extracted = ExtractedEvent(
+            id=_id(),
+            raw_document_id=current_doc.id,
+            processing_run_id=_id(),
+            event_payload={"event_type": "government_funding"},
+        )
+        current_signal = SignalEvent(
+            id=_id(),
+            fingerprint="fp-current",
+            event_type="government_funding",
+            direction=Direction.BULLISH,
+            action_status="announced",
+            catalyst_score=5,
+            classifier_confidence=0.94,
+            alert_level=AlertLevel.TRADEABLE,
+            primary_company_id=None,
+            payload={
+                "ticker": "RGTI",
+                "companies": ["Rigetti Computing"],
+                "rationale": "Current catalyst.",
+                "extracted_event_ids": [current_extracted.id],
+            },
+            published_bucket="2026-06-13",
+            created_at=datetime(2026, 6, 13, 9, 5, tzinfo=timezone.utc),
+        )
+
+        current_alert = Alert(
+            id=_id(),
+            signal_event_id=current_signal.id,
+            market_snapshot_id=None,
+            level=AlertLevel.TRADEABLE,
+            rendered_payload={"ticker": "RGTI", "company": "Rigetti Computing"},
+            score_components={"catalyst_score": 5},
+            dedupe_key="alert-current",
+            created_at=datetime(2026, 6, 13, 9, 6, tzinfo=timezone.utc),
+        )
+
+        db.add_all([
+            older_doc,
+            older_extracted,
+            older_signal,
+            middle_doc,
+            middle_extracted,
+            middle_signal,
+            current_doc,
+            current_extracted,
+            current_signal,
+            current_alert,
+        ])
+        db.commit()
+
+        detail = UIService(db).get_alert_detail(current_alert.id, range_key="1M")
+
+    assert detail is not None
+    chart = detail["chart"]
+    assert chart["available"] is True
+    assert chart["selected_range"] == "1M"
+    assert chart["visible_event_count"] == 3
+    assert chart["total_event_count"] == 3
+    assert any(event["is_focus"] for event in chart["event_lines"])
+    assert any(event["news_id"] == older_doc.id for event in chart["event_lines"])
+    assert chart["points_attr"]
+
+
 def test_get_news_detail_flags_unrecoverable_truncated_truthsocial_text() -> None:
     engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
     Base.metadata.create_all(engine)

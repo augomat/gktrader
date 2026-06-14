@@ -9,6 +9,8 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from urllib.parse import urlencode
+
 import httpx
 
 from gktrader.domain.contracts import MarketSnapshotContract
@@ -77,6 +79,38 @@ class AlpacaIEXProvider(MarketDataProvider):
 
         return self._parse_snapshot(ticker, data, request_time)
 
+    def historical_bars(
+        self,
+        ticker: str,
+        *,
+        start: datetime,
+        end: datetime,
+        timeframe: str,
+        limit: int = 1000,
+    ) -> list[dict[str, Any]]:
+        """Fetch historical IEX bars for *ticker*.
+
+        Returns a list of normalized bar dicts sorted by timestamp ascending.
+        The list is empty when Alpaca returns no bars for the interval.
+        """
+        params = urlencode({
+            "symbols": ticker,
+            "timeframe": timeframe,
+            "start": start.isoformat().replace("+00:00", "Z"),
+            "end": end.isoformat().replace("+00:00", "Z"),
+            "limit": limit,
+            "feed": "iex",
+            "adjustment": "raw",
+            "sort": "asc",
+        })
+        url = f"{_ALPACA_DATA_URL}/stocks/bars?{params}"
+
+        resp = self._client.get(url, headers=self._headers(), timeout=10)
+        resp.raise_for_status()
+        data: dict[str, Any] = resp.json()
+        raw_bars = self._extract_bars_payload(data, ticker)
+        return [self._normalize_bar(bar) for bar in raw_bars]
+
     def _parse_snapshot(
         self,
         ticker: str,
@@ -136,6 +170,41 @@ class AlpacaIEXProvider(MarketDataProvider):
             quality_flags=quality_flags,
             label=IEX_LABEL,
         )
+
+    @staticmethod
+    def _extract_bars_payload(data: dict[str, Any], ticker: str) -> list[dict[str, Any]]:
+        bars = data.get("bars") or []
+        if isinstance(bars, dict):
+            symbol_bars = bars.get(ticker) or bars.get(ticker.upper()) or []
+            if isinstance(symbol_bars, list):
+                return symbol_bars
+            return []
+        if isinstance(bars, list):
+            return bars
+        return []
+
+    @staticmethod
+    def _normalize_bar(bar: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "timestamp": AlpacaIEXProvider._parse_timestamp(bar.get("t")),
+            "open": bar.get("o"),
+            "high": bar.get("h"),
+            "low": bar.get("l"),
+            "close": bar.get("c"),
+            "volume": bar.get("v"),
+            "trade_count": bar.get("n"),
+            "vwap": bar.get("vw"),
+        }
+
+    @staticmethod
+    def _parse_timestamp(value: Any) -> datetime | None:
+        if not isinstance(value, str) or not value:
+            return None
+        normalized = value.replace("Z", "+00:00")
+        parsed = datetime.fromisoformat(normalized)
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
 
     @staticmethod
     def _determine_market_status(data: dict[str, Any]) -> MarketStatus:
