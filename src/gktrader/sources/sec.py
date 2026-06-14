@@ -18,6 +18,7 @@ import re
 import time
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 
 import feedparser
 from pydantic import HttpUrl
@@ -212,8 +213,6 @@ class SECAdapter(SourceAdapter):
         Returns the absolute URL of the first matching 8-K / 8-K/A document,
         or None if no match is found.
         """
-        from urllib.parse import urljoin  # noqa: PLC0415
-
         from bs4 import BeautifulSoup  # noqa: PLC0415
 
         soup = BeautifulSoup(html, "html.parser")
@@ -233,11 +232,22 @@ class SECAdapter(SourceAdapter):
             if doc_type in ("8-K", "8-K/A"):
                 link_tag = cells[2].find("a") if len(cells) > 2 else None
                 if link_tag and link_tag.get("href"):
-                    href = link_tag["href"]
-                    if href.startswith("http"):
-                        return href
-                    return urljoin(base_url, href)
+                    return self._resolve_filing_document_url(link_tag["href"], base_url)
         return None
+
+    def _resolve_filing_document_url(self, href: str, base_url: str) -> str:
+        """Resolve EDGAR filing links and unwrap inline XBRL viewer URLs.
+
+        SEC filing tables often link to `/ix?doc=/Archives/.../*.htm`, which is a
+        JavaScript viewer shell. The actual filing body lives at the `doc=` path.
+        """
+        absolute_url = href if href.startswith("http") else urljoin(base_url, href)
+        parsed = urlparse(absolute_url)
+        doc_path = parse_qs(parsed.query).get("doc", [""])[0]
+        if parsed.path in {"/ix", "/ix/", "/ixviewer/ix.html"} and doc_path:
+            origin = f"{parsed.scheme}://{parsed.netloc}"
+            return urljoin(origin, unquote(doc_path))
+        return absolute_url
 
     # ------------------------------------------------------------------
     # normalize

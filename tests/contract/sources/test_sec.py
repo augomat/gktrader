@@ -297,6 +297,33 @@ class TestFilingIndexParsing:
         assert url is not None
         assert url.startswith("https://www.sec.gov/")
 
+    def test_parse_filing_index_unwraps_inline_xbrl_viewer(self, adapter: SECAdapter) -> None:
+        """Viewer URLs are unwrapped to the raw filing document."""
+        index_html = """
+        <html><body>
+        <table class="tableFile" summary="Document Format Files">
+          <tr><th>Seq</th><th>Description</th><th>Document</th><th>Type</th></tr>
+          <tr>
+            <td>1</td>
+            <td>8-K</td>
+            <td><a href="/ix?doc=/Archives/edgar/data/1018724/000110465926073562/tm2613616d5_8k.htm">tm2613616d5_8k.htm</a></td>
+            <td>8-K</td>
+          </tr>
+        </table>
+        </body></html>
+        """
+        base_url = (
+            "https://www.sec.gov/Archives/edgar/data/1018724/"
+            "000110465926073562/0001104659-26-073562-index.htm"
+        )
+
+        url = adapter._parse_filing_index(index_html, base_url)
+
+        assert url == (
+            "https://www.sec.gov/Archives/edgar/data/1018724/"
+            "000110465926073562/tm2613616d5_8k.htm"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Wrapped detail normalisation
@@ -431,6 +458,53 @@ class TestFetchDetail:
         assert "-index.html" in mock_request.call_args_list[0][0][0]
         # Second request is the filing document
         assert "filing-8k" in mock_request.call_args_list[1][0][0]
+
+    def test_fetch_detail_requests_raw_filing_not_inline_xbrl_viewer(
+        self, adapter: SECAdapter, filing_html: str
+    ) -> None:
+        """fetch_detail should request the raw filing body when the index uses ix?doc."""
+        item = SourceIndexItem(
+            external_id="sec-8k-0001104659-26-073562",
+            detail_url=HttpUrl(
+                "https://www.sec.gov/Archives/edgar/data/1018724/"
+                "000110465926073562/0001104659-26-073562-index.htm"
+            ),
+            title="8-K: Test",
+            metadata={"accession_number": "0001104659-26-073562", "prefilter_match": True},
+        )
+
+        index_resp = MagicMock()
+        index_resp.text = """
+        <html><body>
+        <table class="tableFile" summary="Document Format Files">
+          <tr><th>Seq</th><th>Description</th><th>Document</th><th>Type</th></tr>
+          <tr>
+            <td>1</td>
+            <td>8-K</td>
+            <td><a href="/ix?doc=/Archives/edgar/data/1018724/000110465926073562/tm2613616d5_8k.htm">tm2613616d5_8k.htm</a></td>
+            <td>8-K</td>
+          </tr>
+        </table>
+        </body></html>
+        """
+        index_resp.raise_for_status = MagicMock()
+
+        filing_resp = MagicMock()
+        filing_resp.text = filing_html
+        filing_resp.raise_for_status = MagicMock()
+
+        with patch.object(adapter, "_request") as mock_request:
+            mock_request.side_effect = [index_resp, filing_resp]
+            result = adapter.fetch_detail(item)
+
+        assert mock_request.call_args_list[1][0][0] == (
+            "https://www.sec.gov/Archives/edgar/data/1018724/"
+            "000110465926073562/tm2613616d5_8k.htm"
+        )
+        assert result["filing_url"] == (
+            "https://www.sec.gov/Archives/edgar/data/1018724/"
+            "000110465926073562/tm2613616d5_8k.htm"
+        )
 
 
 # ---------------------------------------------------------------------------
