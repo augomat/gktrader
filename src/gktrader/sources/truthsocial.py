@@ -26,6 +26,7 @@ from gktrader.sources.base import SourceAdapter
 
 TRUTH_SOCIAL_API_BASE = "https://truthsocial.com"
 TRUTH_SOCIAL_ACCOUNT_ID = "107780257626246573"  # @realDonaldTrump
+TRUTH_SOCIAL_PROFILE_URL = f"{TRUTH_SOCIAL_API_BASE}/@realDonaldTrump"
 CNN_MIRROR_URL = "https://ix.cnn.io/data/truth-social/truth_archive.json"
 TRUTH_SOURCE_NAME = "truthsocial"
 
@@ -122,7 +123,7 @@ class TruthSocialAdapter(SourceAdapter):
         )
 
     def _fetch_playwright(self, cursor: str | None = None) -> FetchIndexResult:
-        url = f"{TRUTH_SOCIAL_API_BASE}/@realDonaldTrump"
+        url = TRUTH_SOCIAL_PROFILE_URL
         if cursor:
             url += f"?cursor={cursor}"
 
@@ -400,11 +401,13 @@ class TruthSocialAdapter(SourceAdapter):
             items.append(
                 SourceIndexItem(
                     external_id=ext_id,
-                    detail_url=HttpUrl(f"{TRUTH_SOCIAL_API_BASE}/"),
+                    detail_url=HttpUrl(TRUTH_SOCIAL_PROFILE_URL),
                     title=_truncate_title(normalized_line),
                     published_at=None,
                     updated_at=None,
                     metadata={
+                        "source": "playwright",
+                        "source_page_url": TRUTH_SOCIAL_PROFILE_URL,
                         "playwright_line": i,
                         "raw_line": line,
                         "normalized_line": normalized_line,
@@ -448,6 +451,27 @@ def _normalize_playwright_line(text: str) -> str:
     cleaned = _PLAYWRIGHT_RELATIVE_TIME_RE.sub(" ", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" -·")
     return cleaned.strip()
+
+
+def resolve_truthsocial_source_url(
+    canonical_url: str,
+    metadata: dict[str, Any] | None = None,
+) -> str:
+    metadata = metadata or {}
+
+    for key in ("detail_url", "source_page_url", "permalink", "url"):
+        value = metadata.get(key)
+        if isinstance(value, str) and value.startswith("http"):
+            return value
+
+    post_id = metadata.get("post_id")
+    if isinstance(post_id, str) and post_id:
+        return f"{TRUTH_SOCIAL_PROFILE_URL}/{post_id}"
+
+    normalized = canonical_url.rstrip("/")
+    if normalized == TRUTH_SOCIAL_API_BASE:
+        return TRUTH_SOCIAL_PROFILE_URL
+    return canonical_url
 
 
 # Late import for type annotation used in __init__

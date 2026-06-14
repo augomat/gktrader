@@ -165,6 +165,7 @@ class TestPlaywrightParsing:
         assert len(items_second) == 1
         assert items_first[0].external_id == items_second[0].external_id
         assert items_first[0].title.startswith("Barack Hussein Obama")
+        assert str(items_first[0].detail_url) == "https://truthsocial.com/@realDonaldTrump"
         assert "Pinned Truth" not in items_first[0].title
         assert "16h" not in items_first[0].title
 

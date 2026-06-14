@@ -65,6 +65,7 @@ from gktrader.intelligence.scoring import ScoreContext, compute_actionability
 from gktrader.marketdata.downgrade import apply_market_downgrade
 from gktrader.reporting.paper import make_paper_entry
 from gktrader.sources.base import SourceAdapter
+from gktrader.sources.truthsocial import resolve_truthsocial_source_url
 from gktrader.intelligence.prompts import compute_prompt_hash, get_prompt_info
 
 
@@ -78,6 +79,16 @@ def _now() -> datetime:
 
 def _hash_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _resolve_alert_source_url(raw_doc: RawDocument | None) -> str:
+    if raw_doc is None:
+        return ""
+
+    canonical_url = raw_doc.canonical_url or ""
+    if raw_doc.source_name == "truthsocial":
+        return resolve_truthsocial_source_url(canonical_url, raw_doc.source_metadata)
+    return canonical_url
 
 
 def _as_utc(dt: datetime) -> datetime:
@@ -963,7 +974,7 @@ class SignalPipeline:
                 event_type=signal.event_type,
                 direction=signal.direction,
                 source_name=raw_doc.source_name if raw_doc else "unknown",
-                source_url=raw_doc.canonical_url if raw_doc else "",
+                source_url=_resolve_alert_source_url(raw_doc),
                 fetch_path=raw_doc.fetch_path if raw_doc else "unknown",
                 published_at=raw_doc.published_at if raw_doc else None,
                 detected_at=raw_doc.detected_at if raw_doc else None,

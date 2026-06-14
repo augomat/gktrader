@@ -278,5 +278,6 @@ def test_get_news_detail_returns_linked_signal_and_alert() -> None:
     assert detail["company"] == "Rigetti Computing"
     assert detail["text"] == "Award text body"
     assert detail["rationale"] == "Funding has direct commercial impact."
+    assert detail["source_url"] == "https://example.com/news/2"
     assert detail["source_metadata"] == {"region": "us"}
     assert detail["evidence"][0]["text"] == "Rigetti receives strategic funding."

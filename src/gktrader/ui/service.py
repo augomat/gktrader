@@ -22,6 +22,7 @@ from gktrader.db.models import (
     SourcePollRun,
 )
 from gktrader.domain.enums import AlertLevel, Direction
+from gktrader.sources.truthsocial import resolve_truthsocial_source_url
 
 
 def _age(dt: datetime | None) -> str:
@@ -43,6 +44,12 @@ def _age(dt: datetime | None) -> str:
 class UIService:
     def __init__(self, db: Session) -> None:
         self.db = db
+
+    def _resolve_document_source_url(self, doc: RawDocument) -> str:
+        canonical_url = doc.canonical_url or ""
+        if doc.source_name == "truthsocial":
+            return resolve_truthsocial_source_url(canonical_url, doc.source_metadata)
+        return canonical_url
 
     def _news_context(self, doc: RawDocument) -> dict:
         processing = self.db.scalar(
@@ -118,6 +125,7 @@ class UIService:
             "source_tier": doc.source_tier.value,
             "title": doc.title,
             "canonical_url": doc.canonical_url,
+            "source_url": self._resolve_document_source_url(doc),
             "published_at": doc.published_at,
             "detected_at": doc.detected_at,
             "retrieved_age": _age(doc.detected_at),

@@ -60,7 +60,7 @@
       <div class="subline">
         Retrieved {{ news.retrieved_age }}
         {% if news.published_at %} · Published {{ news.published_age }}{% endif %}
-        {% if news.canonical_url %} · <a href="{{ news.canonical_url }}" class="panel-link" target="_blank" rel="noreferrer">Open source ↗</a>{% endif %}
+        {% if news.source_url %} · <a href="{{ news.source_url }}" class="panel-link" target="_blank" rel="noreferrer">Open source ↗</a>{% endif %}
       </div>
     </div>
     <div class="header-meta">
