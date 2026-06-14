@@ -486,6 +486,10 @@ class SignalPipeline:
                         ) is not None:
                             continue
 
+                        # SEC prefilter: skip items that don't match prefilter keywords
+                        if name == "sec_8k" and not item.metadata.get("prefilter_match", True):
+                            continue
+
                         raw = adapter.fetch_detail(item)
                         doc = adapter.normalize(raw)
                         if doc is None:

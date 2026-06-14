@@ -40,6 +40,18 @@ _PLAYWRIGHT_PREFIX_RE = re.compile(
     r"^(?:Pinned Truth\s+)?Donald J\. Trump\s+@realDonaldTrump\b\s*",
     re.IGNORECASE,
 )
+# Matches a trailing run of engagement-counter tokens (e.g., "842 767 2.86K"
+# or "45.2K 12.3K 1,234").  Used to produce a stable identity across scrapes
+# where engagement counts shift.
+_PLAYWRIGHT_TRAILING_COUNTERS_RE = re.compile(
+    r"(?:\s+[\d,]+(?:\.\d+)?[KkMmBb]?){2,}\s*$|\s+[\d,]+(?:\.\d+)?[KkMmBb]\s*$",
+)
+# Matches a line that is entirely a numeric counter value (optionally with
+# K/M/B suffix).  Used to reject pure counter lines.
+_PLAYWRIGHT_COUNTER_ONLY_RE = re.compile(r"^[\d,]+(?:\.\d+)?[KkMmBb]?$")
+_PLAYWRIGHT_COUNTER_SEQUENCE_RE = re.compile(
+    r"^[\d,]+(?:\.\d+)?[KkMmBb]?(?:\s+[\d,]+(?:\.\d+)?[KkMmBb]?)+$",
+)
 
 
 class TruthSocialAdapter(SourceAdapter):
@@ -401,7 +413,12 @@ class TruthSocialAdapter(SourceAdapter):
         lines = [l for l in raw.split("\n") if l.strip()]
         for i, line in enumerate(lines[:50]):
             normalized_line = _normalize_playwright_line(line)
+            # Reject counter-only lines (e.g. "45.2K", "12.3K", "1,234").
             if not normalized_line:
+                continue
+            if len(normalized_line) < 3:
+                continue
+            if _looks_like_engagement_counter(normalized_line):
                 continue
             ext_id = f"ts-pw-{hashlib.sha256(normalized_line.encode()).hexdigest()[:16]}"
             items.append(
@@ -455,8 +472,18 @@ def _normalize_playwright_line(text: str) -> str:
     cleaned = " ".join(text.split())
     cleaned = _PLAYWRIGHT_PREFIX_RE.sub("", cleaned)
     cleaned = _PLAYWRIGHT_RELATIVE_TIME_RE.sub(" ", cleaned)
+    cleaned = _PLAYWRIGHT_TRAILING_COUNTERS_RE.sub("", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip(" -·")
     return cleaned.strip()
+
+
+def _looks_like_engagement_counter(text: str) -> bool:
+    cleaned = " ".join(text.split())
+    if not cleaned:
+        return True
+    if _PLAYWRIGHT_COUNTER_ONLY_RE.match(cleaned):
+        return True
+    return bool(_PLAYWRIGHT_COUNTER_SEQUENCE_RE.match(cleaned))
 
 
 def resolve_truthsocial_source_url(

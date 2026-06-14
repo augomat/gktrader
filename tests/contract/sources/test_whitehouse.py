@@ -6,6 +6,7 @@ Verifies:
 - Changed-version handling via content hash.
 - Metadata preservation (summary, categories).
 - Normalised document structure conforms to NormalizedDocument.
+- Wrapped detail payload preserves index metadata.
 """
 
 from __future__ import annotations
@@ -15,8 +16,10 @@ from pathlib import Path
 
 import feedparser
 import pytest
+from pydantic import HttpUrl
 
-from gktrader.sources.whitehouse import WhiteHouseAdapter, _stable_id_from_url
+from gktrader.domain.contracts import SourceIndexItem
+from gktrader.sources.whitehouse import WhiteHouseAdapter, _stable_id_from_url, _parse_rss_datetime
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures" / "sources"
 
@@ -160,8 +163,117 @@ class TestHtmlDetail:
 
 
 # ---------------------------------------------------------------------------
-# Fetch index result structure
+# Wrapped detail payload — metadata preservation
 # ---------------------------------------------------------------------------
+
+
+class TestWrappedDetail:
+    """Wrapped detail payloads preserve index item metadata through normalize."""
+
+    def test_fetch_detail_returns_wrapped_payload(
+        self, adapter: WhiteHouseAdapter, parsed_entries: list, article_html: str,
+    ) -> None:
+        """fetch_detail returns a dict with item and html keys."""
+        item = SourceIndexItem(
+            external_id=_stable_id_from_url("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            detail_url=HttpUrl("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            title=parsed_entries[0].get("title", ""),
+            published_at=_parse_rss_datetime(parsed_entries[0].get("published_parsed")),
+            metadata={"summary": parsed_entries[0].get("summary", "")},
+        )
+        wrapped = {"item": item, "html": article_html}
+        doc = adapter.normalize(wrapped)
+
+        assert doc.external_id == item.external_id
+        assert doc.external_id.startswith("wh-")
+        assert "wh-detail-" not in doc.external_id
+        assert str(doc.canonical_url) == str(item.detail_url)
+        assert doc.title == item.title
+        assert doc.published_at == item.published_at
+        assert len(doc.text) > 0
+        assert "infrastructure" in doc.text
+
+    def test_wrapped_preserves_external_id(
+        self, adapter: WhiteHouseAdapter, parsed_entries: list, article_html: str,
+    ) -> None:
+        """external_id comes from SourceIndexItem, not content-hash."""
+        item = SourceIndexItem(
+            external_id=_stable_id_from_url("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            detail_url=HttpUrl("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            title=parsed_entries[0].get("title", ""),
+            published_at=_parse_rss_datetime(parsed_entries[0].get("published_parsed")),
+        )
+        doc = adapter.normalize({"item": item, "html": article_html})
+        # Must be the stable item ID, not a detail-hash ID
+        assert doc.external_id == item.external_id
+        assert doc.external_id.startswith("wh-")
+
+    def test_wrapped_preserves_canonical_url(
+        self, adapter: WhiteHouseAdapter, parsed_entries: list, article_html: str,
+    ) -> None:
+        """canonical_url comes from item.detail_url, not a generic URL."""
+        item = SourceIndexItem(
+            external_id="wh-test",
+            detail_url=HttpUrl("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            title="Test",
+        )
+        doc = adapter.normalize({"item": item, "html": article_html})
+        assert str(doc.canonical_url) == "https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"
+
+    def test_wrapped_preserves_title(
+        self, adapter: WhiteHouseAdapter, parsed_entries: list, article_html: str,
+    ) -> None:
+        """title comes from item.title, not empty."""
+        item = SourceIndexItem(
+            external_id="wh-test",
+            detail_url=HttpUrl("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            title="President Biden Announces New Infrastructure Initiative",
+        )
+        doc = adapter.normalize({"item": item, "html": article_html})
+        assert doc.title == "President Biden Announces New Infrastructure Initiative"
+
+    def test_wrapped_preserves_published_at(
+        self, adapter: WhiteHouseAdapter, parsed_entries: list, article_html: str,
+    ) -> None:
+        """published_at comes from item.published_at, not None."""
+        pub = _parse_rss_datetime(parsed_entries[0].get("published_parsed"))
+        item = SourceIndexItem(
+            external_id="wh-test",
+            detail_url=HttpUrl("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            title="Test",
+            published_at=pub,
+        )
+        doc = adapter.normalize({"item": item, "html": article_html})
+        assert doc.published_at == pub
+        assert doc.published_at is not None
+
+    def test_wrapped_detail_text_extracted(
+        self, adapter: WhiteHouseAdapter, article_html: str,
+    ) -> None:
+        """Detail text is extracted from HTML via trafilatura."""
+        item = SourceIndexItem(
+            external_id="wh-test",
+            detail_url=HttpUrl("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            title="Test",
+        )
+        doc = adapter.normalize({"item": item, "html": article_html})
+        assert len(doc.text) > 0
+        assert "bridge" in doc.text
+        assert "infrastructure" in doc.text
+
+    def test_wrapped_source_metadata_preserved(
+        self, adapter: WhiteHouseAdapter, parsed_entries: list, article_html: str,
+    ) -> None:
+        """source_metadata includes item.metadata and detail_page type."""
+        item = SourceIndexItem(
+            external_id="wh-test",
+            detail_url=HttpUrl("https://www.whitehouse.gov/news/2024/01/15/infrastructure-initiative/"),
+            title="Test",
+            metadata={"summary": "Test summary for metadata preservation"},
+        )
+        doc = adapter.normalize({"item": item, "html": article_html})
+        assert doc.source_metadata.get("summary") == "Test summary for metadata preservation"
+        assert doc.source_metadata.get("type") == "detail_page"
 
 
 class TestFetchIndexStructure:

@@ -159,9 +159,25 @@ class CommerceAdapter(SourceAdapter):
     # ------------------------------------------------------------------
 
     def fetch_detail(self, item: SourceIndexItem) -> Any:
-        resp = self.client.get(str(item.detail_url))
-        resp.raise_for_status()
-        return resp.text
+        # Try direct HTTP first
+        try:
+            resp = self.client.get(str(item.detail_url))
+            resp.raise_for_status()
+            return {
+                "item": item,
+                "html": resp.text,
+                "fetch_path": "http_detail",
+            }
+        except (httpx.HTTPStatusError, httpx.RequestError):
+            pass
+
+        # Fallback to browser/gkfetch using the same path that succeeded for the index
+        html = self._remote_fetch(str(item.detail_url))
+        return {
+            "item": item,
+            "html": html,
+            "fetch_path": "playwright_detail",
+        }
 
     # ------------------------------------------------------------------
     # normalize
@@ -173,6 +189,9 @@ class CommerceAdapter(SourceAdapter):
         if isinstance(raw_item, SourceIndexItem):
             return self._normalize_from_index(raw_item)
         if isinstance(raw_item, dict):
+            # Wrapped detail payload from fetch_detail — preserve listing metadata
+            if "item" in raw_item and "html" in raw_item:
+                return self._normalize_wrapped_detail(raw_item)
             return self._normalize_dict(raw_item)
         msg = f"Unsupported raw_item type: {type(raw_item)}"
         raise TypeError(msg)
@@ -212,6 +231,38 @@ class CommerceAdapter(SourceAdapter):
             updated_at=item.updated_at,
             detected_at=datetime.now(timezone.utc),
             source_metadata=dict(item.metadata),
+        )
+
+    def _normalize_wrapped_detail(self, wrapped: dict) -> NormalizedDocument:
+        """Normalize a wrapped detail payload, preserving listing metadata."""
+        item: SourceIndexItem = wrapped["item"]
+        html: str = wrapped["html"]
+        fetch_path: str = wrapped.get("fetch_path", "wrapped_detail")
+
+        extracted = trafilatura.extract(html, output_format="txt", include_tables=False)
+        text = (extracted or "").strip()
+
+        # Use H1 from detail HTML if present, otherwise fall back to listing title
+        soup = BeautifulSoup(html, "html.parser")
+        title_tag = soup.find("h1")
+        title = title_tag.get_text(strip=True) if title_tag else item.title
+
+        return NormalizedDocument(
+            source_name=self.source_name,
+            source_tier=self.source_tier,
+            fetch_path=fetch_path,
+            external_id=item.external_id,
+            canonical_url=item.detail_url,
+            title=title or item.title,
+            text=text or item.title,
+            published_at=item.published_at,
+            updated_at=item.updated_at,
+            detected_at=datetime.now(timezone.utc),
+            source_metadata={
+                "type": "detail_page",
+                "listing_title": item.title,
+                **dict(item.metadata),
+            },
         )
 
     def _normalize_dict(self, raw: dict) -> NormalizedDocument:
@@ -279,6 +330,9 @@ class CommerceAdapter(SourceAdapter):
         fetch_path: str,
     ) -> None:
         if items:
+            # Record acquisition path so detail fetch can use the same fallback
+            for item in items:
+                item.metadata["listing_fetch_path"] = fetch_path
             return
         msg = f"Commerce {fetch_path} fetch returned HTML with 0 press-release links"
         raise RuntimeError(msg)

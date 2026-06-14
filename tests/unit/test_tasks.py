@@ -237,6 +237,84 @@ class _MockSourceAdapter(SourceAdapter):
         return str(raw_item)
 
 
+class _WrappedDetailAdapter(SourceAdapter):
+    """Test adapter that returns wrapped detail payloads (dict with item + html).
+
+    Simulates the pattern that HTML-detail source adapters (WhiteHouse, NIST,
+    SEC, Commerce) will use: fetch_detail returns a dict preserving the original
+    SourceIndexItem alongside the detail HTML, and normalize unpacks it to build
+    a NormalizedDocument that retains the index metadata.
+    """
+
+    source_name: str = "wrapped_source"
+    source_tier: SourceTier = SourceTier.TIER_1
+
+    def __init__(self, items: list[NormalizedDocument] | None = None):
+        super().__init__()
+        self._items = items or []
+
+    def fetch_index(
+        self, cursor: str | None = None, conditional_headers: dict[str, str] | None = None,
+    ) -> FetchIndexResult:
+        idx_items = [
+            SourceIndexItem(
+                external_id=doc.external_id,
+                detail_url=doc.canonical_url,
+                title=doc.title,
+                published_at=doc.published_at,
+                updated_at=doc.updated_at,
+                metadata=dict(doc.source_metadata or {}),
+            )
+            for doc in self._items
+        ]
+        return FetchIndexResult(items=idx_items, fetch_path="rss")
+
+    def fetch_detail(self, item: SourceIndexItem) -> Any:
+        return {"item": item, "html": f"<html><body><p>Full article for {item.external_id}</p></body></html>"}
+
+    def normalize(self, raw_item: Any) -> NormalizedDocument:
+        if isinstance(raw_item, dict) and "item" in raw_item:
+            item: SourceIndexItem = raw_item["item"]
+            html: str = raw_item.get("html", "")
+            from pydantic import HttpUrl
+            return NormalizedDocument(
+                source_name=self.source_name,
+                source_tier=self.source_tier,
+                fetch_path="detail",
+                external_id=item.external_id,
+                canonical_url=HttpUrl(str(item.detail_url)),
+                title=item.title,
+                text=html,
+                published_at=item.published_at,
+                updated_at=item.updated_at,
+                detected_at=_now(),
+                source_metadata=dict(item.metadata),
+            )
+        ext_id = self.derive_stable_external_id(raw_item)
+        for doc in self._items:
+            if doc.external_id == ext_id:
+                return doc
+        from pydantic import HttpUrl
+        return NormalizedDocument(
+            source_name=self.source_name,
+            source_tier=self.source_tier,
+            fetch_path="detail",
+            external_id=ext_id,
+            canonical_url=HttpUrl("https://example.com/news/1"),
+            title=str(raw_item),
+            text="Fallback text",
+            published_at=_now(),
+            detected_at=_now(),
+        )
+
+    def derive_stable_external_id(self, raw_item: Any) -> str:
+        if isinstance(raw_item, dict) and "item" in raw_item:
+            return raw_item["item"].external_id
+        if hasattr(raw_item, "external_id"):
+            return raw_item.external_id
+        return str(raw_item)
+
+
 class _FakeTruthSocialRepairAdapter(TruthSocialAdapter):
     source_name: str = "truthsocial"
     source_tier: SourceTier = SourceTier.TIER_1
@@ -546,6 +624,133 @@ class TestIngestSources:
 
         runs = db_session.query(SourcePollRun).all()
         assert len(runs) == 1
+
+    def test_ingest_preserves_index_metadata_through_wrapped_detail(self, db_session, resolver):
+        """Wrapped detail payloads must preserve index metadata in RawDocument."""
+        from datetime import timedelta
+        pub_at = _now() - timedelta(hours=2)
+        doc = NormalizedDocument(
+            source_name="wrapped_source",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="detail",
+            external_id="wh-2025-03-01",
+            canonical_url="https://www.whitehouse.gov/briefing-room/statements-releases/2025/03/01/test-announcement/",  # type: ignore[arg-type]
+            title="Test White House Announcement",
+            text="Full article text about policy.",
+            published_at=pub_at,
+            updated_at=pub_at,
+            source_metadata={"author": "Press Secretary", "category": "economy"},
+            detected_at=_now(),
+        )
+        adapter = _WrappedDetailAdapter([doc])
+        settings = _make_settings()
+        pipeline = SignalPipeline(
+            db_session=db_session,
+            settings=settings,
+            adapters={"wrapped_source": adapter},
+            resolver=resolver,
+            classify_fn=lambda t, x, m: _make_classifier_result(),
+            snapshot_fn=lambda t: _make_market_snapshot(t),
+            deliver_fn=lambda s, c, p: DeliveryStatus.SENT,
+            continue_deliver_fn=lambda s, c, m: [DeliveryStatus.SENT],
+            now_fn=_now,
+        )
+
+        results = pipeline.ingest_sources(["wrapped_source"])
+        db_session.commit()
+
+        assert len(results) == 1
+        assert results[0].new_documents == 1
+        assert results[0].status == PollRunStatus.SUCCEEDED
+
+        stored = db_session.query(RawDocument).all()
+        assert len(stored) == 1
+        rd = stored[0]
+
+        # external_id preserved from SourceIndexItem
+        assert rd.external_id == "wh-2025-03-01"
+        # canonical_url preserved from index item detail_url
+        assert "whitehouse.gov" in rd.canonical_url
+        # title preserved from feed item
+        assert rd.title == "Test White House Announcement"
+        # published_at preserved from feed timestamp
+        assert rd.published_at is not None
+        # SQLite stores naive datetimes — compare after making tz-aware
+        stored_pub = rd.published_at
+        if stored_pub.tzinfo is None:
+            stored_pub = stored_pub.replace(tzinfo=timezone.utc)
+        assert stored_pub == pub_at
+        # metadata from source_metadata preserved
+        assert rd.source_metadata is not None
+        assert rd.source_metadata.get("author") == "Press Secretary"
+        # text contains full article content (from html in wrapped payload)
+        assert "Full article" in rd.text
+
+    def test_sec_prefilter_skip(self, db_session, resolver):
+        """SEC items with prefilter_match=False must be skipped before fetch_detail."""
+        from datetime import timedelta
+        pub_at = _now() - timedelta(hours=1)
+
+        # Two docs: one passes prefilter, one does not
+        passing_item = NormalizedDocument(
+            source_name="sec_8k",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="rss",
+            external_id="sec-pass-001",
+            canonical_url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0001838359",  # type: ignore[arg-type]
+            title="8-K - Rigetti Computing Inc",
+            text="Item 8.01 Other Events.",
+            published_at=pub_at,
+            source_metadata={"prefilter_match": True, "accession": "0001838359-25-000001"},
+            detected_at=_now(),
+        )
+        skipped_item = NormalizedDocument(
+            source_name="sec_8k",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="rss",
+            external_id="sec-skip-001",
+            canonical_url="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=0000320193",  # type: ignore[arg-type]
+            title="8-K - Some Other Company",
+            text="Item 1.01 Entry into a Material Definitive Agreement.",
+            published_at=pub_at,
+            source_metadata={"prefilter_match": False, "accession": "0000320193-25-000002"},
+            detected_at=_now(),
+        )
+
+        # Use a custom adapter that returns both items from its index list
+        # and maps them back in normalize by external_id
+        class _SecPrefilterAdapter(_WrappedDetailAdapter):
+            source_name = "sec_8k"
+
+        adapter = _SecPrefilterAdapter([passing_item, skipped_item])
+        settings = _make_settings()
+        pipeline = SignalPipeline(
+            db_session=db_session,
+            settings=settings,
+            adapters={"sec_8k": adapter},
+            resolver=resolver,
+            classify_fn=lambda t, x, m: _make_classifier_result(),
+            snapshot_fn=lambda t: _make_market_snapshot(t),
+            deliver_fn=lambda s, c, p: DeliveryStatus.SENT,
+            continue_deliver_fn=lambda s, c, m: [DeliveryStatus.SENT],
+            now_fn=_now,
+        )
+
+        results = pipeline.ingest_sources(["sec_8k"])
+        db_session.commit()
+
+        assert len(results) == 1
+        # Only the passing item should be stored
+        assert results[0].new_documents == 1
+
+        stored = db_session.query(RawDocument).all()
+        assert len(stored) == 1
+        assert stored[0].external_id == "sec-pass-001"
+        assert stored[0].source_metadata.get("prefilter_match") is True
+
+        # Verify the skipped item's external_id is NOT in the DB
+        skipped = db_session.query(RawDocument).filter_by(external_id="sec-skip-001").first()
+        assert skipped is None
 
 
 # ---------------------------------------------------------------------------

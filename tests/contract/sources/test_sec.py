@@ -9,16 +9,22 @@ Verifies:
 - Filing detail HTML normalisation.
 - Changed-version handling.
 - Rate-limit awareness demonstrated.
+- Filing index page parsing for primary 8-K document extraction.
+- Two-hop fetch_detail returning wrapped payload with index and document.
+- Wrapped detail normalization preserving feed metadata, URLs, and filing text.
 """
 
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock, patch
 
 import feedparser
 import pytest
 
+from gktrader.domain.contracts import HttpUrl, SourceIndexItem
 from gktrader.sources.sec import SECAdapter, _extract_accession, pad_cik
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures" / "sources"
@@ -45,9 +51,47 @@ def filing_html() -> str:
 
 
 @pytest.fixture
+def filing_index_html() -> str:
+    """HTML of the EDGAR filing index page with document table."""
+    return (FIXTURES / "sec_filing_index.html").read_text(encoding="utf-8")
+
+
+@pytest.fixture
 def parsed_entries(feed_xml: str) -> list:
     feed = feedparser.parse(feed_xml)
     return feed.entries
+
+
+@pytest.fixture
+def wrapped_detail(filing_html: str) -> dict:
+    """Simulated wrapped detail payload as returned by fetch_detail()."""
+    item = SourceIndexItem(
+        external_id="sec-8k-0000320193-24-000123",
+        detail_url=HttpUrl(
+            "https://www.sec.gov/Archives/edgar/data/320193/"
+            "0000320193-24-000123-index.html"
+        ),
+        title="8-K: Apple Inc. files current report regarding government contract award",
+        published_at=datetime(2024, 6, 10, 16, 30, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2024, 6, 10, 16, 35, 0, tzinfo=timezone.utc),
+        metadata={
+            "summary": (
+                "Apple Inc. filed a Form 8-K reporting a material definitive "
+                "agreement with a federal agency."
+            ),
+            "accession_number": "0000320193-24-000123",
+            "prefilter_match": True,
+        },
+    )
+    return {
+        "item": item,
+        "index_url": str(item.detail_url),
+        "filing_url": (
+            "https://www.sec.gov/Archives/edgar/data/320193/"
+            "0000320193-24-000123/filing-8k.htm"
+        ),
+        "html": filing_html,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -213,6 +257,180 @@ class TestFilingDetail:
         doc1 = adapter.normalize(filing_html)
         doc2 = adapter.normalize(filing_html)
         assert doc1.external_id == doc2.external_id
+
+
+# ---------------------------------------------------------------------------
+# Filing index page parsing
+# ---------------------------------------------------------------------------
+
+
+class TestFilingIndexParsing:
+    def test_parse_filing_index_finds_8k(self, adapter: SECAdapter, filing_index_html: str) -> None:
+        """_parse_filing_index extracts the primary 8-K document link from the document table."""
+        base_url = (
+            "https://www.sec.gov/Archives/edgar/data/320193/"
+            "0000320193-24-000123-index.html"
+        )
+        url = adapter._parse_filing_index(filing_index_html, base_url)
+        assert url is not None
+        assert url.endswith("filing-8k.htm")
+
+    def test_parse_filing_index_returns_none_when_no_table(self, adapter: SECAdapter) -> None:
+        """_parse_filing_index returns None when there is no document table."""
+        assert adapter._parse_filing_index("<html></html>", "http://example.com") is None
+
+    def test_parse_filing_index_prefers_8k_over_exhibits(self, adapter: SECAdapter, filing_index_html: str) -> None:
+        """The first 8-K row is selected, not an exhibit row."""
+        base_url = "https://www.sec.gov/Archives/edgar/data/320193/0000320193-24-000123-index.html"
+        url = adapter._parse_filing_index(filing_index_html, base_url)
+        assert url is not None
+        assert "filing-8k" in url
+        assert "exhibit" not in url
+
+    def test_parse_filing_index_absolute_url_generation(self, adapter: SECAdapter, filing_index_html: str) -> None:
+        """The returned URL is absolute (https://www.sec.gov/...)."""
+        base_url = (
+            "https://www.sec.gov/Archives/edgar/data/320193/"
+            "0000320193-24-000123-index.html"
+        )
+        url = adapter._parse_filing_index(filing_index_html, base_url)
+        assert url is not None
+        assert url.startswith("https://www.sec.gov/")
+
+
+# ---------------------------------------------------------------------------
+# Wrapped detail normalisation
+# ---------------------------------------------------------------------------
+
+
+class TestWrappedDetailNormalization:
+    def test_preserves_external_id(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """Wrapped detail normalization preserves the feed-derived external_id."""
+        doc = adapter.normalize(wrapped_detail)
+        assert doc.external_id == "sec-8k-0000320193-24-000123"
+
+    def test_preserves_title(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """Wrapped detail normalization preserves the feed title."""
+        doc = adapter.normalize(wrapped_detail)
+        assert "Apple Inc." in doc.title
+        assert "government contract award" in doc.title
+
+    def test_preserves_published_at(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """Wrapped detail normalization preserves published_at from feed."""
+        doc = adapter.normalize(wrapped_detail)
+        assert doc.published_at is not None
+        assert doc.published_at.year == 2024
+
+    def test_preserves_updated_at(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """Wrapped detail normalization preserves updated_at from feed."""
+        doc = adapter.normalize(wrapped_detail)
+        assert doc.updated_at is not None
+        assert doc.updated_at > doc.published_at  # type: ignore[operator]
+
+    def test_canonical_url_is_filing_url(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """canonical_url points to the actual filing document."""
+        doc = adapter.normalize(wrapped_detail)
+        assert "filing-8k.htm" in str(doc.canonical_url)
+
+    def test_contains_actual_filing_text(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """The normalized text is the filing document text, not index-page content."""
+        doc = adapter.normalize(wrapped_detail)
+        assert len(doc.text) > 0
+        # The filing HTML fixture mentions Defense / contract
+        assert "Defense" in doc.text or "contract" in doc.text
+
+    def test_preserves_accession_number(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """Accession number is preserved in source_metadata."""
+        doc = adapter.normalize(wrapped_detail)
+        assert doc.source_metadata.get("accession_number") == "0000320193-24-000123"
+
+    def test_preserves_prefilter_match(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """prefilter_match is preserved in source_metadata."""
+        doc = adapter.normalize(wrapped_detail)
+        assert doc.source_metadata.get("prefilter_match") is True
+
+    def test_stores_index_and_filing_urls(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """index_url and filing_url are stored in source_metadata."""
+        doc = adapter.normalize(wrapped_detail)
+        assert "index_url" in doc.source_metadata
+        assert "filing_url" in doc.source_metadata
+        assert doc.source_metadata["filing_url"].endswith("filing-8k.htm")
+        assert doc.source_metadata["index_url"].endswith("-index.html")
+
+    def test_fetch_path_is_filing_detail(self, adapter: SECAdapter, wrapped_detail: dict) -> None:
+        """fetch_path is 'filing_detail' for wrapped details."""
+        doc = adapter.normalize(wrapped_detail)
+        assert doc.fetch_path == "filing_detail"
+
+
+# ---------------------------------------------------------------------------
+# fetch_detail two-hop
+# ---------------------------------------------------------------------------
+
+
+class TestFetchDetail:
+    def test_returns_wrapped_dict(self, adapter: SECAdapter, filing_index_html: str, filing_html: str) -> None:
+        """fetch_detail returns a dict with item, index_url, filing_url, and html."""
+        item = SourceIndexItem(
+            external_id="sec-8k-0000320193-24-000123",
+            detail_url=HttpUrl(
+                "https://www.sec.gov/Archives/edgar/data/320193/"
+                "0000320193-24-000123-index.html"
+            ),
+            title="8-K: Apple Inc.",
+            published_at=datetime(2024, 6, 10, 16, 30, 0, tzinfo=timezone.utc),
+            updated_at=datetime(2024, 6, 10, 16, 35, 0, tzinfo=timezone.utc),
+            metadata={"accession_number": "0000320193-24-000123", "prefilter_match": True},
+        )
+
+        idx_resp = MagicMock()
+        idx_resp.text = filing_index_html
+        idx_resp.raise_for_status = MagicMock()
+
+        filing_resp = MagicMock()
+        filing_resp.text = filing_html
+        filing_resp.raise_for_status = MagicMock()
+
+        with patch.object(adapter, "_request") as mock_request:
+            mock_request.side_effect = [idx_resp, filing_resp]
+            result = adapter.fetch_detail(item)
+
+        assert isinstance(result, dict)
+        assert result["item"] is item
+        assert result["index_url"] == str(item.detail_url)
+        assert "filing-8k.htm" in result["filing_url"]
+        assert result["html"] == filing_html
+
+    def test_two_hops_made(self, adapter: SECAdapter, filing_index_html: str, filing_html: str) -> None:
+        """fetch_detail makes exactly two HTTP requests: index page and filing document."""
+        item = SourceIndexItem(
+            external_id="sec-8k-0000000000-24-000000",
+            detail_url=HttpUrl(
+                "https://www.sec.gov/Archives/edgar/data/0/"
+                "0000000000-24-000000-index.html"
+            ),
+            title="8-K: Test",
+            metadata={"accession_number": "0000000000-24-000000", "prefilter_match": True},
+        )
+
+        idx_resp = MagicMock()
+        idx_resp.text = filing_index_html
+        idx_resp.raise_for_status = MagicMock()
+
+        filing_resp = MagicMock()
+        filing_resp.text = filing_html
+        filing_resp.raise_for_status = MagicMock()
+
+        with patch.object(adapter, "_request") as mock_request:
+            mock_request.side_effect = [idx_resp, filing_resp]
+            adapter.fetch_detail(item)
+
+        # Two requests made: index + filing document
+        assert mock_request.call_count == 2
+        # First request is the index URL
+        assert "-index.html" in mock_request.call_args_list[0][0][0]
+        # Second request is the filing document
+        assert "filing-8k" in mock_request.call_args_list[1][0][0]
 
 
 # ---------------------------------------------------------------------------

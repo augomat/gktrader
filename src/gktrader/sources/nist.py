@@ -79,12 +79,40 @@ class NISTAdapter(SourceAdapter):
     def fetch_detail(self, item: SourceIndexItem) -> Any:
         resp = self.client.get(str(item.detail_url))
         resp.raise_for_status()
-        return resp.text
+        return {"item": item, "html": resp.text}
 
     def normalize(self, raw_item: Any) -> NormalizedDocument:
+        if isinstance(raw_item, dict) and "item" in raw_item and "html" in raw_item:
+            return self._normalize_wrapped_detail(raw_item["item"], raw_item["html"])
         if isinstance(raw_item, str):
             return self._normalize_html_detail(raw_item)
         return self._normalize_entry(raw_item)
+
+    def _normalize_wrapped_detail(
+        self, item: SourceIndexItem, html: str,
+    ) -> NormalizedDocument:
+        extracted = trafilatura.extract(html, output_format="txt", include_tables=False)
+        text = (extracted or "").strip()
+        metadata = dict(item.metadata)
+        metadata["type"] = "detail_page"
+        # Preserve categories from item metadata
+        if "categories" not in metadata:
+            categories = item.metadata.get("categories", [])
+            if categories:
+                metadata["categories"] = categories
+        return NormalizedDocument(
+            source_name=self.source_name,
+            source_tier=self.source_tier,
+            fetch_path="rss_detail",
+            external_id=item.external_id,
+            canonical_url=item.detail_url,
+            title=item.title,
+            text=text or "",
+            published_at=item.published_at,
+            updated_at=item.updated_at,
+            detected_at=datetime.now(timezone.utc),
+            source_metadata=metadata,
+        )
 
     def _normalize_entry(self, entry: Any) -> NormalizedDocument:
         ext_id = self.derive_stable_external_id(entry)

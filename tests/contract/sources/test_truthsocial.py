@@ -183,6 +183,97 @@ class TestPlaywrightParsing:
         assert len(doc.text) > len(doc.title)
         assert doc.source_metadata["normalized_line"] == doc.text
 
+    # ------------------------------------------------------------------
+    # Engagement-counter rejection, stripping, and stable identity
+    # ------------------------------------------------------------------
+
+    def test_rejects_counter_only_line(self, adapter: TruthSocialAdapter) -> None:
+        """A line that is purely an engagement counter (e.g. '45.2K') is rejected."""
+        items = adapter._parse_text_listing("45.2K")
+        assert len(items) == 0
+
+    def test_rejects_multiple_counters_line(self, adapter: TruthSocialAdapter) -> None:
+        """A line containing only counter values is rejected entirely."""
+        items = adapter._parse_text_listing("45.2K  12.3K  1,234")
+        assert len(items) == 0
+
+    def test_rejects_unsuffixed_counter_fragment_line(self, adapter: TruthSocialAdapter) -> None:
+        """Observed fragments like '842 767 2.86k' are rejected entirely."""
+        items = adapter._parse_text_listing("842 767 2.86k")
+        assert len(items) == 0
+
+    def test_rejects_single_counter_lowercase(self, adapter: TruthSocialAdapter) -> None:
+        """A line that is purely a lowercase-suffix counter is rejected."""
+        items = adapter._parse_text_listing("99.9k")
+        assert len(items) == 0
+
+    def test_rejects_short_numeric_line(self, adapter: TruthSocialAdapter) -> None:
+        """A very short line that is purely numeric is rejected."""
+        items = adapter._parse_text_listing("123")
+        assert len(items) == 0
+
+    def test_strips_trailing_counters_from_valid_post(self, adapter: TruthSocialAdapter) -> None:
+        """Trailing engagement counters are stripped from otherwise valid post text."""
+        raw = (
+            "Donald J. Trump @realDonaldTrump · 2h "
+            "Big news coming for American manufacturing! "
+            "45.2K  12.3K  1,234"
+        )
+        items = adapter._parse_text_listing(raw)
+        assert len(items) == 1, "expected exactly one item"
+        title = items[0].title
+        assert "Big news coming for American manufacturing" in title
+        assert "45.2K" not in title
+        assert "12.3K" not in title
+        assert "1,234" not in title
+
+    def test_strips_observed_trailing_counter_shape(self, adapter: TruthSocialAdapter) -> None:
+        """Trailing counters are stripped when only the final token has a suffix."""
+        raw = (
+            "Donald J. Trump @realDonaldTrump · 2h "
+            "Big news coming for American manufacturing! "
+            "842 767 2.86k"
+        )
+        items = adapter._parse_text_listing(raw)
+        assert len(items) == 1
+        assert items[0].title == "Big news coming for American manufacturing!"
+
+    def test_trailing_counters_do_not_change_stable_id(self, adapter: TruthSocialAdapter) -> None:
+        """The same post text with different trailing counters gets the same external_id."""
+        raw_a = (
+            "Donald J. Trump @realDonaldTrump · 2h "
+            "We are winning like never before! "
+            "85.2K  15.3K"
+        )
+        raw_b = (
+            "Donald J. Trump @realDonaldTrump · 3h "
+            "We are winning like never before! "
+            "92.1K  18.7K  2,345"
+        )
+        items_a = adapter._parse_text_listing(raw_a)
+        items_b = adapter._parse_text_listing(raw_b)
+        assert len(items_a) == 1
+        assert len(items_b) == 1
+        assert items_a[0].external_id == items_b[0].external_id
+        # Both should retain the same core text after stripping counters
+        assert items_a[0].title == items_b[0].title
+        assert "We are winning like never before!" in items_a[0].title
+
+    def test_counter_lines_among_valid_posts(self, adapter: TruthSocialAdapter) -> None:
+        """Counter-only lines interspersed with real posts do not become items."""
+        raw = (
+            "Donald J. Trump @realDonaldTrump · 1h America is back!\n"
+            "45.2K\n"
+            "12.3K\n"
+            "Donald J. Trump @realDonaldTrump · 2h We will not back down ever!\n"
+            "99.1K\n"
+            "1,234"
+        )
+        items = adapter._parse_text_listing(raw)
+        assert len(items) == 2
+        assert "America is back!" in items[0].title
+        assert "We will not back down ever!" in items[1].title
+
 
 # ---------------------------------------------------------------------------
 # Changed-version handling

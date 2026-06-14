@@ -5,15 +5,21 @@ Verifies:
 - HTML listing and detail page parsing.
 - Fetch path recording for HTTP and fallback.
 - Changed-version handling via content hash.
+- Wrapped detail payload preserves listing metadata.
+- fetch_detail fallback to _remote_fetch when direct HTTP fails.
 """
 
 from __future__ import annotations
 
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest import mock
 
 import httpx
 import pytest
+from pydantic import HttpUrl
 
+from gktrader.domain.contracts import SourceIndexItem
 from gktrader.sources.commerce import CommerceAdapter
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures" / "sources"
@@ -121,8 +127,239 @@ class TestDetailNormalization:
 
 
 # ---------------------------------------------------------------------------
-# Fallback validation
+# Wrapped detail normalization (preserving listing metadata)
 # ---------------------------------------------------------------------------
+
+
+class TestWrappedDetailNormalization:
+    """Verify that wrapped detail payloads preserve listing item metadata."""
+
+    def test_preserves_external_id_and_url(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """Wrapped detail keeps listing external_id and detail_url."""
+        item = SourceIndexItem(
+            external_id="commerce-test-id-1234",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/test"),
+            title="Listing Title",
+            published_at=datetime(2024, 5, 20, tzinfo=timezone.utc),
+        )
+        wrapped = {"item": item, "html": detail_html, "fetch_path": "http_detail"}
+        doc = adapter.normalize(wrapped)
+        assert doc.external_id == "commerce-test-id-1234"
+        assert str(doc.canonical_url) == str(item.detail_url)
+
+    def test_preserves_title_from_listing_when_detail_has_no_h1(
+        self, adapter: CommerceAdapter
+    ) -> None:
+        """Fallback to listing title when detail HTML lacks an H1."""
+        item = SourceIndexItem(
+            external_id="commerce-test-id-5678",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/other"),
+            title="Original Listing Title",
+        )
+        no_h1_html = "<html><body><p>Some content without H1</p></body></html>"
+        wrapped = {"item": item, "html": no_h1_html, "fetch_path": "http_detail"}
+        doc = adapter.normalize(wrapped)
+        assert doc.title == "Original Listing Title"
+
+    def test_preserves_published_at(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """Listing published_at is carried through to the NormalizedDocument."""
+        pub = datetime(2024, 5, 20, 12, 0, 0, tzinfo=timezone.utc)
+        item = SourceIndexItem(
+            external_id="commerce-test-id-9012",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/dates"),
+            title="Dated Listing",
+            published_at=pub,
+        )
+        wrapped = {"item": item, "html": detail_html, "fetch_path": "http_detail"}
+        doc = adapter.normalize(wrapped)
+        assert doc.published_at == pub
+
+    def test_fetch_path_recorded(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """The fetch_path from wrapped payload is recorded."""
+        item = SourceIndexItem(
+            external_id="commerce-test-id-path",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/path"),
+            title="Path Test",
+        )
+        wrapped = {"item": item, "html": detail_html, "fetch_path": "playwright_detail"}
+        doc = adapter.normalize(wrapped)
+        assert doc.fetch_path == "playwright_detail"
+
+    def test_extracted_text_from_detail_html(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """Useful text is extracted from the detail HTML."""
+        item = SourceIndexItem(
+            external_id="commerce-test-id-text",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/text"),
+            title="Text Extraction",
+        )
+        wrapped = {"item": item, "html": detail_html, "fetch_path": "http_detail"}
+        doc = adapter.normalize(wrapped)
+        assert "semiconductor" in doc.text.lower()
+        assert len(doc.text) > 20
+
+    def test_listing_title_in_source_metadata(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """Original listing title is preserved in source_metadata."""
+        item = SourceIndexItem(
+            external_id="commerce-test-id-meta",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/meta"),
+            title="Original Title For Metadata",
+        )
+        wrapped = {"item": item, "html": detail_html, "fetch_path": "http_detail"}
+        doc = adapter.normalize(wrapped)
+        assert doc.source_metadata.get("listing_title") == "Original Title For Metadata"
+        assert doc.source_metadata.get("type") == "detail_page"
+
+
+# ---------------------------------------------------------------------------
+# fetch_detail fallback tests
+# ---------------------------------------------------------------------------
+
+
+class TestFetchDetailFallback:
+    """Verify fetch_detail falls back to _remote_fetch when HTTP fails."""
+
+    def test_fetch_detail_http_success_returns_wrapped_payload(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """Successful direct HTTP returns a wrapped payload."""
+        item = SourceIndexItem(
+            external_id="commerce-http-ok",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/http-ok"),
+            title="HTTP OK",
+        )
+        mock_resp = mock.Mock()
+        mock_resp.text = detail_html
+        mock_resp.raise_for_status.return_value = None
+        adapter.client = mock.Mock()
+        adapter.client.get.return_value = mock_resp
+
+        result = adapter.fetch_detail(item)
+        assert isinstance(result, dict)
+        assert result["item"] is item
+        assert result["html"] == detail_html
+        assert result["fetch_path"] == "http_detail"
+        adapter.client.get.assert_called_once_with(str(item.detail_url))
+
+    def test_fetch_detail_fallback_to_remote_fetch(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """When HTTP fails, fetch_detail falls back to _remote_fetch."""
+        item = SourceIndexItem(
+            external_id="commerce-fallback",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/05/fallback"),
+            title="Fallback Test",
+        )
+
+        def failing_get(*args, **kwargs):
+            request = httpx.Request("GET", str(item.detail_url))
+            response = httpx.Response(403, request=request)
+            raise httpx.HTTPStatusError("blocked", request=request, response=response)
+
+        adapter.client = mock.Mock()
+        adapter.client.get.side_effect = failing_get
+
+        original_remote = adapter._remote_fetch
+
+        def fake_remote_fetch(url: str) -> str:
+            return detail_html
+
+        adapter._remote_fetch = fake_remote_fetch  # type: ignore[assignment]
+
+        try:
+            result = adapter.fetch_detail(item)
+            assert isinstance(result, dict)
+            assert result["item"] is item
+            assert result["html"] == detail_html
+            assert result["fetch_path"] == "playwright_detail"
+        finally:
+            adapter._remote_fetch = original_remote
+
+    def test_fetch_detail_fallback_preserves_metadata_through_normalize(
+        self, adapter: CommerceAdapter, detail_html: str
+    ) -> None:
+        """Fallback path through normalize preserves listing metadata."""
+        pub = datetime(2024, 6, 1, tzinfo=timezone.utc)
+        item = SourceIndexItem(
+            external_id="commerce-end-to-end",
+            detail_url=HttpUrl("https://www.commerce.gov/news/press-releases/2024/06/e2e"),
+            title="End-to-End Test",
+            published_at=pub,
+        )
+
+        def failing_get(*args, **kwargs):
+            request = httpx.Request("GET", str(item.detail_url))
+            response = httpx.Response(403, request=request)
+            raise httpx.HTTPStatusError("blocked", request=request, response=response)
+
+        adapter.client = mock.Mock()
+        adapter.client.get.side_effect = failing_get
+
+        original_remote = adapter._remote_fetch
+
+        def fake_remote_fetch(url: str) -> str:
+            return detail_html
+
+        adapter._remote_fetch = fake_remote_fetch  # type: ignore[assignment]
+
+        try:
+            raw = adapter.fetch_detail(item)
+            doc = adapter.normalize(raw)
+            assert doc.external_id == "commerce-end-to-end"
+            assert str(doc.canonical_url) == str(item.detail_url)
+            assert doc.title == "Commerce Announces $50 Million Semiconductor Manufacturing Grant"
+            assert doc.published_at == pub
+            assert doc.fetch_path == "playwright_detail"
+            assert "semiconductor" in doc.text.lower()
+        finally:
+            adapter._remote_fetch = original_remote
+
+
+# ---------------------------------------------------------------------------
+# source_index_item metadata recording
+# ---------------------------------------------------------------------------
+
+
+class TestListingMetadataRecording:
+    """Verify listing_fetch_path is recorded in SourceIndexItem metadata."""
+
+    def test_listing_fetch_path_recorded_in_metadata(
+        self, adapter: CommerceAdapter, listing_html: str
+    ) -> None:
+        """_validate_listing_items records listing_fetch_path in metadata."""
+        items = adapter._parse_listing_html(listing_html)
+        adapter._validate_listing_items(items, fetch_path="http")
+        for item in items:
+            assert item.metadata.get("listing_fetch_path") == "http"
+
+    def test_playwright_path_in_metadata(
+        self, adapter: CommerceAdapter, listing_html: str
+    ) -> None:
+        """Playwright path is also recorded."""
+        items = adapter._parse_listing_html(listing_html)
+        adapter._validate_listing_items(items, fetch_path="playwright")
+        for item in items:
+            assert item.metadata.get("listing_fetch_path") == "playwright"
+
+    def test_wrapped_detail_contains_listing_fetch_path(
+        self, adapter: CommerceAdapter, detail_html: str, listing_html: str
+    ) -> None:
+        """listing_fetch_path flows through wrapped detail into source_metadata."""
+        items = adapter._parse_listing_html(listing_html)
+        adapter._validate_listing_items(items, fetch_path="playwright")
+        item = items[0]
+        wrapped = {"item": item, "html": detail_html, "fetch_path": "playwright_detail"}
+        doc = adapter.normalize(wrapped)
+        assert doc.source_metadata.get("listing_fetch_path") == "playwright"
 
 
 class TestFetchValidation:

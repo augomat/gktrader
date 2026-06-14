@@ -166,9 +166,78 @@ class SECAdapter(SourceAdapter):
     # ------------------------------------------------------------------
 
     def fetch_detail(self, item: SourceIndexItem) -> Any:
-        """Fetch the filing detail page and return its HTML content."""
-        resp = self._request(str(item.detail_url))
-        return resp.text
+        """Fetch the actual 8-K filing document via the EDGAR filing index page.
+
+        Two-hop strategy:
+          1. Fetch the EDGAR filing index page (item.detail_url).
+          2. Parse the document table to locate the primary 8-K / 8-K/A document.
+          3. Fetch that actual filing document.
+
+        Returns a wrapped dict with keys: item, index_url, filing_url, html.
+        If no 8-K document is found in the table, falls back to the index page HTML.
+        """
+        index_url = str(item.detail_url)
+
+        # Step 1: fetch the filing index page
+        index_resp = self._request(index_url)
+        index_html = index_resp.text
+
+        # Step 2: parse index to find the primary 8-K document link
+        filing_url = self._parse_filing_index(index_html, index_url)
+
+        # Step 3: fetch the actual filing document
+        if filing_url:
+            filing_resp = self._request(filing_url)
+            filing_html = filing_resp.text
+        else:
+            filing_html = index_html
+
+        return {
+            "item": item,
+            "index_url": index_url,
+            "filing_url": filing_url or "",
+            "html": filing_html,
+        }
+
+    def _parse_filing_index(self, html: str, base_url: str) -> str | None:
+        """Parse the EDGAR filing index HTML and return the URL of the primary
+        8-K or 8-K/A document from the document table.
+
+        The document table is typically:
+          <table class="tableFile" summary="Document Format Files">
+            <tr><th>Seq</th><th>Description</th><th>Document</th><th>Type</th><th>Size</th></tr>
+            <tr><td>1</td><td>8-K</td><td><a href="...">...</a></td><td>8-K</td><td>...</td></tr>
+          </table>
+
+        Returns the absolute URL of the first matching 8-K / 8-K/A document,
+        or None if no match is found.
+        """
+        from urllib.parse import urljoin  # noqa: PLC0415
+
+        from bs4 import BeautifulSoup  # noqa: PLC0415
+
+        soup = BeautifulSoup(html, "html.parser")
+
+        # Locate the document table — try class first, then summary attribute
+        table = soup.find("table", class_="tableFile")
+        if not table:
+            table = soup.find("table", {"summary": "Document Format Files"})
+        if not table:
+            return None
+
+        for row in table.find_all("tr"):
+            cells = row.find_all("td")
+            if len(cells) < 4:
+                continue
+            doc_type = cells[3].get_text(strip=True)
+            if doc_type in ("8-K", "8-K/A"):
+                link_tag = cells[2].find("a") if len(cells) > 2 else None
+                if link_tag and link_tag.get("href"):
+                    href = link_tag["href"]
+                    if href.startswith("http"):
+                        return href
+                    return urljoin(base_url, href)
+        return None
 
     # ------------------------------------------------------------------
     # normalize
@@ -177,6 +246,8 @@ class SECAdapter(SourceAdapter):
     def normalize(self, raw_item: Any) -> NormalizedDocument:
         if isinstance(raw_item, str):
             return self._normalize_filing_html(raw_item)
+        if isinstance(raw_item, dict) and "item" in raw_item and "html" in raw_item:
+            return self._normalize_wrapped_detail(raw_item)
         if hasattr(raw_item, "get") and (
             raw_item.get("link") is not None or raw_item.get("summary") is not None
         ):
@@ -261,9 +332,54 @@ class SECAdapter(SourceAdapter):
             },
         )
 
-    # ------------------------------------------------------------------
-    # derive_stable_external_id
-    # ------------------------------------------------------------------
+    def _normalize_wrapped_detail(self, wrapped: dict) -> NormalizedDocument:
+        """Normalize a wrapped detail payload produced by fetch_detail().
+
+        The wrapped dict contains:
+          - item:      SourceIndexItem from the Atom feed
+          - index_url: URL of the EDGAR filing index page
+          - filing_url: URL of the actual 8-K filing document (may be empty)
+          - html:      HTML content of the actual filing document
+
+        Preserves feed metadata and stores the actual filing text.
+        """
+        item: SourceIndexItem = wrapped["item"]
+        html: str = wrapped["html"]
+        index_url: str = wrapped.get("index_url", "")
+        filing_url: str = wrapped.get("filing_url", "")
+
+        # Extract text from filing HTML
+        from bs4 import BeautifulSoup  # noqa: PLC0415
+
+        soup = BeautifulSoup(html, "html.parser")
+        for tag in soup(["script", "style", "nav", "header", "footer"]):
+            tag.decompose()
+        text = soup.get_text(separator=" ", strip=True)
+
+        # Prefer canonical_url pointing to the actual filing document
+        canonical_url = (
+            HttpUrl(filing_url)
+            if filing_url
+            else HttpUrl(index_url)
+        )
+
+        return NormalizedDocument(
+            source_name=self.source_name,
+            source_tier=self.source_tier,
+            fetch_path="filing_detail",
+            external_id=item.external_id,
+            canonical_url=canonical_url,
+            title=item.title,
+            text=text,
+            published_at=item.published_at,
+            updated_at=item.updated_at,
+            detected_at=datetime.now(timezone.utc),
+            source_metadata={
+                **dict(item.metadata),
+                "index_url": index_url,
+                "filing_url": filing_url,
+            },
+        )
 
     def derive_stable_external_id(self, raw_item: Any) -> str:
         if hasattr(raw_item, "get"):
