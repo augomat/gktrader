@@ -16,6 +16,7 @@ from gktrader.ui.service import UIService
 
 router = APIRouter(prefix="/ui")
 templates = Jinja2Templates(directory=Path(__file__).parent.parent / "templates")
+_COOKIE_MAX_AGE = 10 * 365 * 24 * 3600
 
 _LEVEL_CSS = {
     "TRADEABLE": "tradeable",
@@ -50,7 +51,7 @@ def _guard(request: Request) -> bool:
 
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, error: str = ""):
-    return templates.TemplateResponse("login.html", {"request": request, "error": error})
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": error})
 
 
 @router.post("/login")
@@ -59,11 +60,11 @@ async def login_submit(request: Request, secret: str = Form(...)):
     settings = get_settings()
     if secret != settings.internal_api_shared_secret:
         return templates.TemplateResponse(
-            "login.html", {"request": request, "error": "Invalid secret"}, status_code=401
+            request, "login.html", {"request": request, "error": "Invalid secret"}, status_code=401
         )
     token = make_session_token(settings.internal_api_shared_secret)
     response = RedirectResponse("/ui/dashboard", status_code=303)
-    response.set_cookie("gkt_session", token, httponly=True, samesite="lax", max_age=7 * 24 * 3600)
+    response.set_cookie("gkt_session", token, httponly=True, samesite="lax", max_age=_COOKIE_MAX_AGE)
     return response
 
 
@@ -88,13 +89,15 @@ async def dashboard(request: Request, svc: UIService = Depends(_svc)):
     if not _guard(request):
         return RedirectResponse("/ui/login", status_code=303)
     stats = svc.dashboard_stats()
+    news = svc.recent_news(limit=10)
     alerts = svc.recent_alerts(limit=8)
     positions = svc.list_positions()
     health = svc.pipeline_health()
-    return templates.TemplateResponse("dashboard.html", {
+    return templates.TemplateResponse(request, "dashboard.html", {
         "request": request,
         "page": "dashboard",
         "stats": stats,
+        "news": news,
         "alerts": alerts,
         "positions": positions,
         "health": health,
@@ -111,7 +114,7 @@ async def alerts_page(request: Request, svc: UIService = Depends(_svc)):
     if not _guard(request):
         return RedirectResponse("/ui/login", status_code=303)
     alerts = svc.recent_alerts(limit=50)
-    return templates.TemplateResponse("alerts.html", {
+    return templates.TemplateResponse(request, "alerts.html", {
         "request": request,
         "page": "alerts",
         "alerts": alerts,
@@ -124,7 +127,7 @@ async def alert_feed_partial(request: Request, svc: UIService = Depends(_svc)):
     if not _guard(request):
         return HTMLResponse("", status_code=401)
     alerts = svc.recent_alerts(limit=50)
-    return templates.TemplateResponse("partials/alert_feed.html", {
+    return templates.TemplateResponse(request, "partials/alert_feed.html", {
         "request": request,
         "alerts": alerts,
         "level_css": _LEVEL_CSS,
@@ -138,7 +141,7 @@ async def alert_detail(request: Request, alert_id: str, svc: UIService = Depends
     alert = svc.get_alert_detail(alert_id)
     if not alert:
         return HTMLResponse("Alert not found", status_code=404)
-    return templates.TemplateResponse("alert_detail.html", {
+    return templates.TemplateResponse(request, "alert_detail.html", {
         "request": request,
         "page": "alerts",
         "alert": alert,
@@ -202,7 +205,7 @@ async def positions_page(request: Request, svc: UIService = Depends(_svc)):
     positions = svc.list_positions()
     events = svc.position_events_log()
     summary = svc.position_summary()
-    return templates.TemplateResponse("positions.html", {
+    return templates.TemplateResponse(request, "positions.html", {
         "request": request,
         "page": "positions",
         "positions": positions,
@@ -246,7 +249,7 @@ async def performance_page(request: Request, svc: UIService = Depends(_svc)):
         return RedirectResponse("/ui/login", status_code=303)
     trades = svc.paper_performance()
     summary = svc.performance_summary()
-    return templates.TemplateResponse("performance.html", {
+    return templates.TemplateResponse(request, "performance.html", {
         "request": request,
         "page": "performance",
         "trades": trades,
@@ -265,7 +268,7 @@ async def pipeline_page(request: Request, svc: UIService = Depends(_svc)):
     health = svc.pipeline_health()
     poll_runs = svc.recent_poll_runs(limit=20)
     processing = svc.recent_processing(limit=10)
-    return templates.TemplateResponse("pipeline.html", {
+    return templates.TemplateResponse(request, "pipeline.html", {
         "request": request,
         "page": "pipeline",
         "health": health,
@@ -279,7 +282,7 @@ async def pipeline_health_partial(request: Request, svc: UIService = Depends(_sv
     if not _guard(request):
         return HTMLResponse("", status_code=401)
     health = svc.pipeline_health()
-    return templates.TemplateResponse("partials/pipeline_health.html", {
+    return templates.TemplateResponse(request, "partials/pipeline_health.html", {
         "request": request,
         "health": health,
     })

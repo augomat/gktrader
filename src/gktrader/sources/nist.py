@@ -38,6 +38,10 @@ class NISTAdapter(SourceAdapter):
     ) -> FetchIndexResult:
         headers = dict(conditional_headers or {})
         resp = self.client.get(FEED_URL, headers=headers or None)
+        if resp.status_code == 304:
+            etag = resp.headers.get("etag") or (conditional_headers or {}).get("If-None-Match")
+            last_mod = resp.headers.get("last-modified") or (conditional_headers or {}).get("If-Modified-Since")
+            return FetchIndexResult(items=[], fetch_path="rss", etag=etag, last_modified=last_mod)
         resp.raise_for_status()
 
         feed = feedparser.parse(resp.content)

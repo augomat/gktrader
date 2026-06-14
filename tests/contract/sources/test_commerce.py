@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
 
 from gktrader.sources.commerce import CommerceAdapter
@@ -120,13 +121,40 @@ class TestDetailNormalization:
 
 
 # ---------------------------------------------------------------------------
+# Fallback validation
+# ---------------------------------------------------------------------------
+
+
+class TestFetchValidation:
+    def test_playwright_listing_without_press_release_links_fails(
+        self,
+        adapter: CommerceAdapter,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        request = httpx.Request("GET", "https://www.commerce.gov/news/press-releases")
+        response = httpx.Response(403, request=request)
+
+        def fail_http(*args, **kwargs):
+            raise httpx.HTTPStatusError("blocked", request=request, response=response)
+
+        def fake_remote_fetch(url: str) -> str:
+            return "<html><body><h1>Access denied</h1></body></html>"
+
+        monkeypatch.setattr(adapter, "_fetch_http_index", fail_http)
+        monkeypatch.setattr(adapter, "_remote_fetch", fake_remote_fetch)
+
+        with pytest.raises(RuntimeError, match="0 press-release links"):
+            adapter.fetch_index()
+
+
+# ---------------------------------------------------------------------------
 # Adapter metadata
 # ---------------------------------------------------------------------------
 
 
 class TestAdapterMetadata:
     def test_poll_interval(self, adapter: CommerceAdapter) -> None:
-        assert adapter.poll_interval_seconds == 60
+        assert adapter.poll_interval_seconds == 600
 
     def test_source_tier(self, adapter: CommerceAdapter) -> None:
         assert adapter.source_tier.value == "tier_1"

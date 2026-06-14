@@ -7,7 +7,12 @@ from gktrader.config.settings import get_settings
 
 settings = get_settings()
 
-celery_app = Celery("gktrader", broker=settings.redis_url, backend=settings.redis_url)
+celery_app = Celery(
+    "gktrader",
+    broker=settings.redis_url,
+    backend=settings.redis_url,
+    include=["gktrader.tasks.jobs"],
+)
 celery_app.conf.update(
     timezone=settings.europe_timezone,
     enable_utc=True,
@@ -15,6 +20,7 @@ celery_app.conf.update(
     accept_content=["json"],
     result_serializer="json",
     task_default_retry_delay=30,
+    task_default_queue="gktrader",
     task_routes={"gktrader.tasks.jobs.*": {"queue": "gktrader"}},
     beat_schedule={
         "poll-sources": {
@@ -47,3 +53,6 @@ celery_app.conf.update(
         },
     },
 )
+
+# Ensure task decorators run when the Celery app module is imported.
+from gktrader.tasks import jobs  # noqa: F401,E402

@@ -15,6 +15,7 @@ import time as _time
 from datetime import UTC, datetime, timedelta
 
 import httpx
+import redis
 from sqlalchemy import select
 
 from gktrader.config.settings import get_settings
@@ -42,6 +43,9 @@ from gktrader.tasks.celery_app import celery_app
 from gktrader.tasks.pipeline import PipelineResult, SignalPipeline
 
 logger = logging.getLogger(__name__)
+
+_POLL_SOURCES_LOCK_KEY = "gktrader:poll_sources:lock"
+_POLL_SOURCES_LOCK_TIMEOUT_SECONDS = 15 * 60
 
 # ---------------------------------------------------------------------------
 # Cached, deterministic ticker resolver
@@ -130,6 +134,24 @@ def _build_pipeline() -> SignalPipeline:
     )
 
 
+def _get_redis_client(settings) -> redis.Redis:
+    return redis.Redis.from_url(settings.redis_url)
+
+
+def _acquire_poll_sources_lock(settings) -> redis.lock.Lock | None:
+    """Return a non-blocking distributed lock for poll_sources, if acquired."""
+    client = _get_redis_client(settings)
+    lock = client.lock(
+        _POLL_SOURCES_LOCK_KEY,
+        timeout=_POLL_SOURCES_LOCK_TIMEOUT_SECONDS,
+        blocking=False,
+    )
+    acquired = lock.acquire(blocking=False)
+    if not acquired:
+        return None
+    return lock
+
+
 def _run_in_session(
     pipeline: SignalPipeline,
     source_names: list[str] | None = None,
@@ -161,16 +183,36 @@ def poll_sources(self) -> dict:
     This replaces the noop stub with a full persisted pipeline:
       source ingestion -> classification -> signal creation -> alert outbox.
     """
-    pipeline = _build_pipeline()
-    result = _run_in_session(pipeline)
-    return {
-        "status": "completed",
-        "task": self.name,
-        "ran_at": datetime.now(UTC).isoformat(),
-        "raw_documents": result.total_raw_documents,
-        "signals": result.total_signals,
-        "alerts": result.total_alerts,
-    }
+    settings = get_settings()
+    lock = _acquire_poll_sources_lock(settings)
+    if lock is None:
+        logger.info("Skipping poll_sources because another run is still active")
+        return {
+            "status": "skipped",
+            "task": self.name,
+            "ran_at": datetime.now(UTC).isoformat(),
+            "reason": "another poll_sources run is still active",
+            "raw_documents": 0,
+            "signals": 0,
+            "alerts": 0,
+        }
+
+    try:
+        pipeline = _build_pipeline()
+        result = _run_in_session(pipeline)
+        return {
+            "status": "completed",
+            "task": self.name,
+            "ran_at": datetime.now(UTC).isoformat(),
+            "raw_documents": result.total_raw_documents,
+            "signals": result.total_signals,
+            "alerts": result.total_alerts,
+        }
+    finally:
+        try:
+            lock.release()
+        except redis.exceptions.LockError:
+            logger.warning("poll_sources lock expired before release")
 
 
 @celery_app.task(

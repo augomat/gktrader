@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 from datetime import datetime, timezone
 from typing import Any
@@ -33,6 +34,11 @@ TRUTH_SOURCE_NAME = "truthsocial"
 # cannot enqueue tens of thousands of fetch/normalize/DB operations.  Dedup on
 # (source_name, external_id, content_hash) still guarantees idempotency.
 MAX_MIRROR_ITEMS = 50
+_PLAYWRIGHT_RELATIVE_TIME_RE = re.compile(r"\s*·\s*\d+\s*[smhdwy]\b", re.IGNORECASE)
+_PLAYWRIGHT_PREFIX_RE = re.compile(
+    r"^(?:Pinned Truth\s+)?Donald J\. Trump\s+@realDonaldTrump\b\s*",
+    re.IGNORECASE,
+)
 
 
 class TruthSocialAdapter(SourceAdapter):
@@ -44,7 +50,7 @@ class TruthSocialAdapter(SourceAdapter):
 
     source_name: str = TRUTH_SOURCE_NAME
     source_tier: SourceTier = SourceTier.TIER_1
-    poll_interval_seconds: int = 60
+    poll_interval_seconds: int = 600
 
     def __init__(
         self,
@@ -387,15 +393,22 @@ class TruthSocialAdapter(SourceAdapter):
         items: list[SourceIndexItem] = []
         lines = [l for l in raw.split("\n") if l.strip()]
         for i, line in enumerate(lines[:50]):
-            ext_id = f"ts-pw-{hashlib.sha256(line.encode()).hexdigest()[:16]}"
+            normalized_line = _normalize_playwright_line(line)
+            if not normalized_line:
+                continue
+            ext_id = f"ts-pw-{hashlib.sha256(normalized_line.encode()).hexdigest()[:16]}"
             items.append(
                 SourceIndexItem(
                     external_id=ext_id,
                     detail_url=HttpUrl(f"{TRUTH_SOCIAL_API_BASE}/"),
-                    title=_truncate_title(line),
+                    title=_truncate_title(normalized_line),
                     published_at=None,
                     updated_at=None,
-                    metadata={"playwright_line": i},
+                    metadata={
+                        "playwright_line": i,
+                        "raw_line": line,
+                        "normalized_line": normalized_line,
+                    },
                 )
             )
         return items
@@ -427,6 +440,14 @@ def _truncate_title(text: str, max_len: int = 120) -> str:
     if len(cleaned) <= max_len:
         return cleaned
     return cleaned[:max_len].rsplit(" ", 1)[0] + "…"
+
+
+def _normalize_playwright_line(text: str) -> str:
+    cleaned = " ".join(text.split())
+    cleaned = _PLAYWRIGHT_PREFIX_RE.sub("", cleaned)
+    cleaned = _PLAYWRIGHT_RELATIVE_TIME_RE.sub(" ", cleaned)
+    cleaned = re.sub(r"\s+", " ", cleaned).strip(" -·")
+    return cleaned.strip()
 
 
 # Late import for type annotation used in __init__

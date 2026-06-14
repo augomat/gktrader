@@ -2,12 +2,14 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import desc, func, select
+from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import Session
 
 from gktrader.db.models import (
     Alert,
     EventEvidence,
+    EventCompany,
+    ExtractedEvent,
     MarketSnapshot,
     PaperTrade,
     PerformanceSnapshot,
@@ -89,6 +91,90 @@ class UIService:
             "avg_return_1d": avg_return,
             "paper_trade_count": len(day_snaps),
         }
+
+    def recent_news(self, limit: int = 12) -> list[dict]:
+        latest_docs = (
+            select(
+                RawDocument.source_name.label("source_name"),
+                RawDocument.external_id.label("external_id"),
+                func.max(RawDocument.detected_at).label("detected_at"),
+            )
+            .group_by(RawDocument.source_name, RawDocument.external_id)
+            .subquery()
+        )
+        docs = self.db.scalars(
+            select(RawDocument)
+            .join(
+                latest_docs,
+                and_(
+                    RawDocument.source_name == latest_docs.c.source_name,
+                    RawDocument.external_id == latest_docs.c.external_id,
+                    RawDocument.detected_at == latest_docs.c.detected_at,
+                ),
+            )
+            .order_by(desc(RawDocument.detected_at))
+            .limit(limit)
+        ).all()
+        result = []
+        for doc in docs:
+            processing = self.db.scalar(
+                select(ProcessingRun)
+                .where(ProcessingRun.raw_document_id == doc.id)
+                .order_by(desc(ProcessingRun.created_at))
+                .limit(1)
+            )
+            extracted = self.db.scalar(
+                select(ExtractedEvent)
+                .where(ExtractedEvent.raw_document_id == doc.id)
+                .order_by(desc(ExtractedEvent.created_at))
+                .limit(1)
+            )
+            event_companies = []
+            signal = None
+            if extracted:
+                event_companies = self.db.scalars(
+                    select(EventCompany).where(EventCompany.extracted_event_id == extracted.id)
+                ).all()
+                signals = self.db.scalars(
+                    select(SignalEvent).order_by(desc(SignalEvent.created_at))
+                ).all()
+                for candidate in signals:
+                    extracted_ids = (candidate.payload or {}).get("extracted_event_ids", [])
+                    if extracted.id in extracted_ids:
+                        signal = candidate
+                        break
+
+            parsed = processing.parsed_result or {} if processing else {}
+            signal_payload = signal.payload or {} if signal else {}
+            companies = [ec.candidate_name for ec in event_companies if ec.candidate_name]
+            if not companies:
+                companies = [c.get("name", "") for c in parsed.get("companies", []) if c.get("name")]
+            best_company = companies[0] if companies else ""
+            best_mapping = max((ec.mapping_confidence for ec in event_companies), default=None)
+
+            result.append({
+                "id": doc.id,
+                "source_name": doc.source_name,
+                "source_tier": doc.source_tier.value,
+                "title": doc.title,
+                "canonical_url": doc.canonical_url,
+                "published_at": doc.published_at,
+                "detected_at": doc.detected_at,
+                "retrieved_age": _age(doc.detected_at),
+                "published_age": _age(doc.published_at),
+                "processing_status": processing.status.value if processing else "pending",
+                "relevant": parsed.get("relevant"),
+                "event_type": parsed.get("event_type", ""),
+                "direction": parsed.get("direction", ""),
+                "classifier_confidence": parsed.get("confidence"),
+                "company": best_company,
+                "company_count": len(companies),
+                "mapping_confidence": best_mapping,
+                "ticker": signal_payload.get("ticker", ""),
+                "alert_level": signal.alert_level.value if signal else "",
+                "catalyst_score": signal.catalyst_score if signal else None,
+            })
+        return result
 
     # ------------------------------------------------------------------
     # Alerts

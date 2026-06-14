@@ -147,6 +147,28 @@ class TestCrossPathDeduplication:
         assert api_doc.external_id == mirror_doc.external_id
 
 
+class TestPlaywrightParsing:
+    def test_playwright_normalizes_volatile_pinned_prefix(self, adapter: TruthSocialAdapter) -> None:
+        first = (
+            "Pinned Truth Donald J. Trump @realDonaldTrump · 16h "
+            "Barack Hussein Obama’s Deal with Iran, the JCPOA, was an easy, terrible disaster"
+        )
+        second = (
+            "Pinned Truth Donald J. Trump @realDonaldTrump · 15h "
+            "Barack Hussein Obama’s Deal with Iran, the JCPOA, was an easy, terrible disaster"
+        )
+
+        items_first = adapter._parse_text_listing(first)
+        items_second = adapter._parse_text_listing(second)
+
+        assert len(items_first) == 1
+        assert len(items_second) == 1
+        assert items_first[0].external_id == items_second[0].external_id
+        assert items_first[0].title.startswith("Barack Hussein Obama")
+        assert "Pinned Truth" not in items_first[0].title
+        assert "16h" not in items_first[0].title
+
+
 # ---------------------------------------------------------------------------
 # Changed-version handling
 # ---------------------------------------------------------------------------
@@ -175,7 +197,7 @@ class TestChangedVersionHandling:
 
 class TestAdapterMetadata:
     def test_poll_interval(self, adapter: TruthSocialAdapter) -> None:
-        assert adapter.poll_interval_seconds == 60
+        assert adapter.poll_interval_seconds == 600
 
     def test_source_tier(self, adapter: TruthSocialAdapter) -> None:
         assert adapter.source_tier.value == "tier_1"

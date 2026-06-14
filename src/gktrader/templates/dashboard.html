@@ -3,6 +3,7 @@
 
 {% block extra_css %}
 .kpi-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+.stack { display: flex; flex-direction: column; gap: 16px; }
 .two-col { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
 .alert-row { display: flex; align-items: flex-start; gap: 10px; padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; text-decoration: none; color: inherit; }
 .alert-row:last-child { border-bottom: none; }
@@ -29,7 +30,31 @@
 .health-source { font-family: var(--font-mono); font-size: 12px; width: 110px; flex-shrink: 0; }
 .health-last { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-left: auto; margin-right: 8px; }
 .col-gap { display: flex; flex-direction: column; gap: 16px; }
+.news-head { display: grid; grid-template-columns: 100px 1fr 84px 72px 68px 90px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
+.news-row { display: grid; grid-template-columns: 100px 1fr 84px 72px 68px 90px; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12px; }
+.news-row:last-child { border-bottom: none; }
+.news-title { min-width: 0; }
+.news-title-main { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
+.news-title-sub { color: var(--text-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); }
+.news-cell { font-family: var(--font-mono); color: var(--text-muted); }
+.news-pill { font-size: 10px; font-weight: 700; font-family: var(--font-mono); padding: 2px 6px; border-radius: 4px; display: inline-block; }
+.news-pill.succeeded { background: rgba(63,185,80,.08); color: var(--tradeable); }
+.news-pill.failed { background: rgba(248,81,73,.08); color: var(--bearish); }
+.news-pill.pending { background: rgba(56,139,253,.08); color: var(--watch); }
+.news-pill.invalid { background: rgba(139,148,158,.08); color: var(--text-dim); }
+.news-rating { display: flex; flex-direction: column; gap: 3px; align-items: flex-start; }
+.mobile-only { display: none; }
 .empty-state { padding: 24px 16px; text-align: center; color: var(--text-dim); font-size: 13px; }
+@media (max-width: 1100px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .two-col { grid-template-columns: 1fr; }
+}
+@media (max-width: 760px) {
+  .kpi-row { grid-template-columns: 1fr; }
+  .news-head { display: none; }
+  .news-row { grid-template-columns: 1fr; }
+  .mobile-only { display: inline; color: var(--text-dim); }
+}
 {% endblock %}
 
 {% block content %}
@@ -63,41 +88,98 @@
   </div>
 </div>
 
-<div class="two-col">
+<div class="stack">
   <div class="panel">
     <div class="panel-header">
-      <span class="panel-title">Recent Alerts</span>
-      <a href="/ui/alerts" class="panel-link">View all →</a>
+      <span class="panel-title">Retrieved News</span>
     </div>
-    {% if alerts %}
-    {% for alert in alerts %}
-    <a href="/ui/alerts/{{ alert.id }}" class="alert-row">
-      <div class="alert-level-bar {{ level_css.get(alert.level|upper, 'ignore') }}"></div>
-      <div class="alert-main">
-        <div class="alert-top">
-          <span class="ticker {% if alert.direction == 'bullish' %}bull{% else %}bear{% endif %}" style="font-size:15px">
-            {% if alert.ticker %}${{ alert.ticker }}{% else %}—{% endif %}
-          </span>
-          <span class="badge {{ level_css.get(alert.level|upper, 'ignore') }}">{{ alert.level|upper|replace('_',' ') }}</span>
-        </div>
-        <div class="alert-subtitle">
-          {% if alert.direction == 'bullish' %}🚀{% else %}🔴{% endif %}
-          {{ alert.direction|upper }} — {{ alert.event_type|replace('_',' ') }}
-          {% if alert.company %} · {{ alert.company }}{% endif %}
-        </div>
-        <div class="alert-meta">{{ alert.age }}</div>
+    <div class="news-head">
+      <div class="th">Source</div>
+      <div class="th">Title / Classification</div>
+      <div class="th">Retrieved</div>
+      <div class="th">Rating</div>
+      <div class="th">Ticker</div>
+      <div class="th">Status</div>
+    </div>
+    {% if news %}
+    {% for item in news %}
+    <div class="news-row">
+      <div class="news-cell">
+        {{ item.source_name }}
+        <div style="font-size:10px;color:var(--text-dim)">{{ item.source_tier|upper|replace('_',' ') }}</div>
       </div>
-      <div class="score-pill">
+      <div class="news-title">
+        <div class="news-title-main">{{ item.title }}</div>
+        <div class="news-title-sub">
+          {% if item.company %}{{ item.company }}{% else %}no company{% endif %}
+          {% if item.event_type %} · {{ item.event_type|replace('_',' ') }}{% endif %}
+          {% if item.classifier_confidence is not none %} · conf {{ "%.2f"|format(item.classifier_confidence) }}{% endif %}
+          {% if item.mapping_confidence is not none %} · map {{ "%.2f"|format(item.mapping_confidence) }}{% endif %}
+        </div>
+      </div>
+      <div class="news-cell">
+        <span class="mobile-only">Retrieved: </span>{{ item.retrieved_age }}
+      </div>
+      <div class="news-rating">
+        {% if item.catalyst_score is not none %}
         <div class="score-dots">
-          {% for i in range(5) %}<div class="sdot {% if i < alert.catalyst_score %}on{% else %}off{% endif %}"></div>{% endfor %}
+          {% for i in range(5) %}<div class="sdot {% if i < item.catalyst_score %}on{% else %}off{% endif %}"></div>{% endfor %}
         </div>
+        {% endif %}
+        {% if item.alert_level %}
+        <span class="badge {{ level_css.get(item.alert_level|upper, 'ignore') }}">{{ item.alert_level|replace('_',' ') }}</span>
+        {% else %}
+        <span class="news-cell">—</span>
+        {% endif %}
       </div>
-    </a>
+      <div class="news-cell">
+        <span class="mobile-only">Ticker: </span>{% if item.ticker %}${{ item.ticker }}{% else %}—{% endif %}
+      </div>
+      <div>
+        <span class="news-pill {{ item.processing_status }}">{{ item.processing_status|upper }}</span>
+      </div>
+    </div>
     {% endfor %}
     {% else %}
-    <div class="empty-state">No alerts yet. Pipeline will populate this as signals arrive.</div>
+    <div class="empty-state">No retrieved documents yet.</div>
     {% endif %}
   </div>
+
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-header">
+        <span class="panel-title">Recent Alerts</span>
+        <a href="/ui/alerts" class="panel-link">View all →</a>
+      </div>
+      {% if alerts %}
+      {% for alert in alerts %}
+      <a href="/ui/alerts/{{ alert.id }}" class="alert-row">
+        <div class="alert-level-bar {{ level_css.get(alert.level|upper, 'ignore') }}"></div>
+        <div class="alert-main">
+          <div class="alert-top">
+            <span class="ticker {% if alert.direction == 'bullish' %}bull{% else %}bear{% endif %}" style="font-size:15px">
+              {% if alert.ticker %}${{ alert.ticker }}{% else %}—{% endif %}
+            </span>
+            <span class="badge {{ level_css.get(alert.level|upper, 'ignore') }}">{{ alert.level|upper|replace('_',' ') }}</span>
+          </div>
+          <div class="alert-subtitle">
+            {% if alert.direction == 'bullish' %}🚀{% else %}🔴{% endif %}
+            {{ alert.direction|upper }} — {{ alert.event_type|replace('_',' ') }}
+            {% if alert.company %} · {{ alert.company }}{% endif %}
+          </div>
+          <div class="alert-meta">{{ alert.age }}</div>
+        </div>
+        <div class="score-pill">
+          <div class="score-dots">
+            {% for i in range(5) %}<div class="sdot {% if i < alert.catalyst_score %}on{% else %}off{% endif %}"></div>{% endfor %}
+          </div>
+        </div>
+      </a>
+      {% endfor %}
+      {% else %}
+      <div class="empty-state">No alerts yet. Pipeline will populate this as signals arrive.</div>
+      {% endif %}
+    </div>
 
   <div class="col-gap">
     <div class="panel">
@@ -149,5 +231,6 @@
       {% endif %}
     </div>
   </div>
+</div>
 </div>
 {% endblock %}

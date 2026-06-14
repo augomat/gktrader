@@ -37,7 +37,7 @@ class CommerceAdapter(SourceAdapter):
 
     source_name: str = SOURCE_NAME
     source_tier: SourceTier = SourceTier.TIER_1
-    poll_interval_seconds: int = 60
+    poll_interval_seconds: int = 600
 
     def __init__(
         self,
@@ -60,20 +60,24 @@ class CommerceAdapter(SourceAdapter):
         cursor: str | None = None,
         conditional_headers: dict[str, str] | None = None,
     ) -> FetchIndexResult:
+        errors: list[str] = []
+
         # 1. Direct HTTP
         try:
             return self._fetch_http_index(cursor, conditional_headers)
-        except (httpx.HTTPStatusError, httpx.RequestError):
-            pass
+        except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+            errors.append(f"http: {exc}")
 
         # 2. Playwright fallback
         try:
             return self._fetch_playwright_index(cursor)
-        except Exception:
-            pass
+        except Exception as exc:
+            errors.append(f"playwright: {exc}")
 
         # Neither path succeeded — raise so the caller can mark degraded
         msg = "All Commerce acquisition paths failed"
+        if errors:
+            msg += f" ({'; '.join(errors)})"
         raise RuntimeError(msg)
 
     def _fetch_http_index(
@@ -90,6 +94,7 @@ class CommerceAdapter(SourceAdapter):
         resp.raise_for_status()
 
         items = self._parse_listing_html(resp.text)
+        self._validate_listing_items(items, fetch_path="http")
         next_cursor = self._extract_next_page(resp.text)
 
         return FetchIndexResult(
@@ -111,6 +116,7 @@ class CommerceAdapter(SourceAdapter):
         html = self._remote_fetch(url)
 
         items = self._parse_listing_html(html)
+        self._validate_listing_items(items, fetch_path="playwright")
         next_cursor = self._extract_next_page(html)
 
         return FetchIndexResult(
@@ -265,6 +271,17 @@ class CommerceAdapter(SourceAdapter):
                 )
             )
         return items
+
+    def _validate_listing_items(
+        self,
+        items: list[SourceIndexItem],
+        *,
+        fetch_path: str,
+    ) -> None:
+        if items:
+            return
+        msg = f"Commerce {fetch_path} fetch returned HTML with 0 press-release links"
+        raise RuntimeError(msg)
 
     def _extract_next_page(self, html: str) -> str | None:
         """Extract the next page cursor from pagination links."""
