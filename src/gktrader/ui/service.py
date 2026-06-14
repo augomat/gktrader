@@ -44,6 +44,97 @@ class UIService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
+    def _news_context(self, doc: RawDocument) -> dict:
+        processing = self.db.scalar(
+            select(ProcessingRun)
+            .where(ProcessingRun.raw_document_id == doc.id)
+            .order_by(desc(ProcessingRun.created_at))
+            .limit(1)
+        )
+        extracted = self.db.scalar(
+            select(ExtractedEvent)
+            .where(ExtractedEvent.raw_document_id == doc.id)
+            .order_by(desc(ExtractedEvent.created_at))
+            .limit(1)
+        )
+
+        event_companies: list[EventCompany] = []
+        signal = None
+        if extracted:
+            event_companies = self.db.scalars(
+                select(EventCompany).where(EventCompany.extracted_event_id == extracted.id)
+            ).all()
+            signals = self.db.scalars(
+                select(SignalEvent).order_by(desc(SignalEvent.created_at))
+            ).all()
+            for candidate in signals:
+                extracted_ids = (candidate.payload or {}).get("extracted_event_ids", [])
+                if extracted.id in extracted_ids:
+                    signal = candidate
+                    break
+
+        parsed = processing.parsed_result or {} if processing else {}
+        signal_payload = signal.payload or {} if signal else {}
+        companies = [ec.candidate_name for ec in event_companies if ec.candidate_name]
+        if not companies:
+            companies = [c.get("name", "") for c in parsed.get("companies", []) if c.get("name")]
+
+        alert = None
+        evidence: list[EventEvidence] = []
+        if signal:
+            alert = self.db.scalar(
+                select(Alert)
+                .where(Alert.signal_event_id == signal.id)
+                .order_by(desc(Alert.created_at))
+                .limit(1)
+            )
+            evidence = self.db.scalars(
+                select(EventEvidence).where(EventEvidence.signal_event_id == signal.id)
+            ).all()
+
+        return {
+            "processing": processing,
+            "extracted": extracted,
+            "parsed": parsed,
+            "signal": signal,
+            "signal_payload": signal_payload,
+            "event_companies": event_companies,
+            "companies": companies,
+            "best_company": companies[0] if companies else "",
+            "best_mapping": max((ec.mapping_confidence for ec in event_companies), default=None),
+            "alert": alert,
+            "evidence": evidence,
+        }
+
+    def _serialize_news_row(self, doc: RawDocument, context: dict) -> dict:
+        processing = context["processing"]
+        parsed = context["parsed"]
+        signal = context["signal"]
+        signal_payload = context["signal_payload"]
+
+        return {
+            "id": doc.id,
+            "source_name": doc.source_name,
+            "source_tier": doc.source_tier.value,
+            "title": doc.title,
+            "canonical_url": doc.canonical_url,
+            "published_at": doc.published_at,
+            "detected_at": doc.detected_at,
+            "retrieved_age": _age(doc.detected_at),
+            "published_age": _age(doc.published_at),
+            "processing_status": processing.status.value if processing else "pending",
+            "relevant": parsed.get("relevant"),
+            "event_type": parsed.get("event_type", ""),
+            "direction": parsed.get("direction", ""),
+            "classifier_confidence": parsed.get("confidence"),
+            "company": context["best_company"],
+            "company_count": len(context["companies"]),
+            "mapping_confidence": context["best_mapping"],
+            "ticker": signal_payload.get("ticker", ""),
+            "alert_level": signal.alert_level.value if signal else "",
+            "catalyst_score": signal.catalyst_score if signal else None,
+        }
+
     # ------------------------------------------------------------------
     # Dashboard stats
     # ------------------------------------------------------------------
@@ -117,64 +208,41 @@ class UIService:
         ).all()
         result = []
         for doc in docs:
-            processing = self.db.scalar(
-                select(ProcessingRun)
-                .where(ProcessingRun.raw_document_id == doc.id)
-                .order_by(desc(ProcessingRun.created_at))
-                .limit(1)
-            )
-            extracted = self.db.scalar(
-                select(ExtractedEvent)
-                .where(ExtractedEvent.raw_document_id == doc.id)
-                .order_by(desc(ExtractedEvent.created_at))
-                .limit(1)
-            )
-            event_companies = []
-            signal = None
-            if extracted:
-                event_companies = self.db.scalars(
-                    select(EventCompany).where(EventCompany.extracted_event_id == extracted.id)
-                ).all()
-                signals = self.db.scalars(
-                    select(SignalEvent).order_by(desc(SignalEvent.created_at))
-                ).all()
-                for candidate in signals:
-                    extracted_ids = (candidate.payload or {}).get("extracted_event_ids", [])
-                    if extracted.id in extracted_ids:
-                        signal = candidate
-                        break
-
-            parsed = processing.parsed_result or {} if processing else {}
-            signal_payload = signal.payload or {} if signal else {}
-            companies = [ec.candidate_name for ec in event_companies if ec.candidate_name]
-            if not companies:
-                companies = [c.get("name", "") for c in parsed.get("companies", []) if c.get("name")]
-            best_company = companies[0] if companies else ""
-            best_mapping = max((ec.mapping_confidence for ec in event_companies), default=None)
-
-            result.append({
-                "id": doc.id,
-                "source_name": doc.source_name,
-                "source_tier": doc.source_tier.value,
-                "title": doc.title,
-                "canonical_url": doc.canonical_url,
-                "published_at": doc.published_at,
-                "detected_at": doc.detected_at,
-                "retrieved_age": _age(doc.detected_at),
-                "published_age": _age(doc.published_at),
-                "processing_status": processing.status.value if processing else "pending",
-                "relevant": parsed.get("relevant"),
-                "event_type": parsed.get("event_type", ""),
-                "direction": parsed.get("direction", ""),
-                "classifier_confidence": parsed.get("confidence"),
-                "company": best_company,
-                "company_count": len(companies),
-                "mapping_confidence": best_mapping,
-                "ticker": signal_payload.get("ticker", ""),
-                "alert_level": signal.alert_level.value if signal else "",
-                "catalyst_score": signal.catalyst_score if signal else None,
-            })
+            result.append(self._serialize_news_row(doc, self._news_context(doc)))
         return result
+
+    def get_news_detail(self, news_id: str) -> dict | None:
+        doc = self.db.get(RawDocument, news_id)
+        if not doc:
+            return None
+
+        context = self._news_context(doc)
+        row = self._serialize_news_row(doc, context)
+        signal = context["signal"]
+        alert = context["alert"]
+        parsed = context["parsed"]
+
+        row.update({
+            "text": doc.text,
+            "fetch_path": doc.fetch_path,
+            "external_id": doc.external_id,
+            "correlation_id": doc.correlation_id,
+            "source_metadata": doc.source_metadata or {},
+            "signal_id": signal.id if signal else "",
+            "signal_created_at": signal.created_at if signal else None,
+            "alert_id": alert.id if alert else "",
+            "alert_created_at": alert.created_at if alert else None,
+            "rationale": context["signal_payload"].get("rationale", ""),
+            "risks": context["signal_payload"].get("risks", []),
+            "companies": context["companies"],
+            "evidence": [
+                {"text": e.evidence_text, "start": e.start_offset, "end": e.end_offset}
+                for e in context["evidence"]
+            ],
+            "action_status": signal.action_status if signal else "",
+            "relevant": parsed.get("relevant"),
+        })
+        return row
 
     # ------------------------------------------------------------------
     # Alerts

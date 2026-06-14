@@ -105,6 +105,21 @@ async def dashboard(request: Request, svc: UIService = Depends(_svc)):
     })
 
 
+@router.get("/news/{news_id}", response_class=HTMLResponse)
+async def news_detail(request: Request, news_id: str, svc: UIService = Depends(_svc)):
+    if not _guard(request):
+        return RedirectResponse("/ui/login", status_code=303)
+    news = svc.get_news_detail(news_id)
+    if not news:
+        return HTMLResponse("News item not found", status_code=404)
+    return templates.TemplateResponse(request, "news_detail.html", {
+        "request": request,
+        "page": "dashboard",
+        "news": news,
+        "level_css": _LEVEL_CSS,
+    })
+
+
 # ------------------------------------------------------------------
 # Alerts
 # ------------------------------------------------------------------

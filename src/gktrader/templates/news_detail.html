@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}News Detail — GKTrader{% endblock %}
+
+{% block extra_css %}
+.breadcrumb { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; font-family: var(--font-mono); }
+.breadcrumb a { color: var(--watch); text-decoration: none; }
+.breadcrumb a:hover { text-decoration: underline; }
+.news-header { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; margin-bottom: 14px; }
+.header-accent { height: 4px; background: var(--watch); }
+.header-body { padding: 18px 20px; display: flex; align-items: flex-start; gap: 14px; }
+.header-info { flex: 1; min-width: 0; }
+.source-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 6px; }
+.source-name { font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); }
+.news-title { font-size: 22px; font-weight: 700; line-height: 1.3; margin-bottom: 8px; }
+.subline { font-size: 12px; color: var(--text-dim); font-family: var(--font-mono); }
+.header-meta { text-align: right; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); line-height: 1.7; flex-shrink: 0; }
+.score-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-top: 1px solid var(--border); }
+.score-cell { background: var(--surface); padding: 11px 16px; }
+.score-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 4px; }
+.score-val { font-family: var(--font-mono); font-size: 15px; font-weight: 700; }
+.section { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin-bottom: 12px; }
+.section-header { padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); display: flex; align-items: center; gap: 8px; }
+.section-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; color: var(--text-muted); }
+.section-body { padding: 14px 16px; }
+.detail-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 16px; }
+.detail-item { font-size: 13px; }
+.detail-label { font-size: 10px; text-transform: uppercase; letter-spacing: .08em; color: var(--text-dim); margin-bottom: 3px; }
+.detail-value { color: var(--text); word-break: break-word; }
+.detail-value.mono { font-family: var(--font-mono); font-size: 12px; }
+.text-block { white-space: pre-wrap; font-size: 13px; line-height: 1.7; color: var(--text); }
+.evidence-item { background: var(--surface-2); border: 1px solid var(--border-muted); border-left: 3px solid var(--watch); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); line-height: 1.55; }
+.evidence-item:last-child { margin-bottom: 0; }
+.meta-list { display: flex; flex-direction: column; gap: 8px; }
+.meta-row { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; font-family: var(--font-mono); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+.meta-row:last-child { border-bottom: none; padding-bottom: 0; }
+.meta-key { color: var(--text-dim); }
+.meta-value { color: var(--text); text-align: right; word-break: break-word; }
+@media (max-width: 900px) {
+  .score-row { grid-template-columns: repeat(2, 1fr); }
+  .detail-grid { grid-template-columns: 1fr; }
+  .header-body { flex-direction: column; }
+  .header-meta { text-align: left; }
+}
+{% endblock %}
+
+{% block content %}
+<div class="breadcrumb"><a href="/ui/dashboard">← Dashboard</a> / News</div>
+
+<div class="news-header">
+  <div class="header-accent"></div>
+  <div class="header-body">
+    <div class="header-info">
+      <div class="source-row">
+        <span class="source-name">{{ news.source_name }}</span>
+        <span class="tier-badge {% if news.source_tier == 'tier_1' %}t1{% else %}t2{% endif %}">{{ news.source_tier|upper|replace('_', ' ') }}</span>
+        <span class="news-pill {{ news.processing_status }}">{{ news.processing_status|upper }}</span>
+        {% if news.alert_level %}<span class="badge {{ level_css.get(news.alert_level|upper, 'ignore') }}">{{ news.alert_level|replace('_', ' ') }}</span>{% endif %}
+      </div>
+      <div class="news-title">{{ news.title }}</div>
+      <div class="subline">
+        Retrieved {{ news.retrieved_age }}
+        {% if news.published_at %} · Published {{ news.published_age }}{% endif %}
+        {% if news.canonical_url %} · <a href="{{ news.canonical_url }}" class="panel-link" target="_blank" rel="noreferrer">Open source ↗</a>{% endif %}
+      </div>
+    </div>
+    <div class="header-meta">
+      ID: {{ news.id[:8] }}<br>
+      {% if news.signal_id %}Signal: {{ news.signal_id[:8] }}<br>{% endif %}
+      {{ news.detected_at.strftime('%Y-%m-%d %H:%M UTC') if news.detected_at else '—' }}
+    </div>
+  </div>
+  <div class="score-row">
+    <div class="score-cell">
+      <div class="score-label">Catalyst Score</div>
+      {% if news.catalyst_score is not none %}
+      <div class="score-dots" style="margin-bottom:4px">
+        {% for i in range(5) %}<div class="sdot {% if i < news.catalyst_score %}on{% else %}off{% endif %}" style="width:9px;height:9px"></div>{% endfor %}
+      </div>
+      <div class="score-val green">{{ news.catalyst_score }} / 5</div>
+      {% else %}
+      <div class="score-val" style="color:var(--text-dim)">—</div>
+      {% endif %}
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Classifier Conf.</div>
+      {% if news.classifier_confidence is not none %}
+      <div class="score-val {% if news.classifier_confidence >= 0.8 %}green{% elif news.classifier_confidence >= 0.6 %}amber{% else %}red{% endif %}">{{ "%.0f%%"|format(news.classifier_confidence * 100) }}</div>
+      {% else %}
+      <div class="score-val" style="color:var(--text-dim)">—</div>
+      {% endif %}
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Mapping Conf.</div>
+      {% if news.mapping_confidence is not none %}
+      <div class="score-val {% if news.mapping_confidence >= 0.9 %}green{% elif news.mapping_confidence >= 0.75 %}amber{% else %}red{% endif %}">{{ "%.0f%%"|format(news.mapping_confidence * 100) }}</div>
+      {% else %}
+      <div class="score-val" style="color:var(--text-dim)">—</div>
+      {% endif %}
+    </div>
+    <div class="score-cell">
+      <div class="score-label">Alert State</div>
+      {% if news.alert_id %}
+      <div><a href="/ui/alerts/{{ news.alert_id }}" class="panel-link">Open alert →</a></div>
+      {% elif news.signal_id and news.alert_level == 'WATCH' %}
+      <div class="score-val blue" style="font-size:12px">WATCH only</div>
+      {% elif news.signal_id %}
+      <div class="score-val amber" style="font-size:12px">Signal only</div>
+      {% else %}
+      <div class="score-val" style="color:var(--text-dim)">No signal</div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-title">Classification</span></div>
+  <div class="section-body">
+    <div class="detail-grid">
+      <div class="detail-item"><div class="detail-label">Company</div><div class="detail-value">{{ news.company or '—' }}</div></div>
+      <div class="detail-item"><div class="detail-label">Ticker</div><div class="detail-value mono">{% if news.ticker %}${{ news.ticker }}{% else %}—{% endif %}</div></div>
+      <div class="detail-item"><div class="detail-label">Event Type</div><div class="detail-value">{{ news.event_type|replace('_', ' ') if news.event_type else '—' }}</div></div>
+      <div class="detail-item"><div class="detail-label">Direction</div><div class="detail-value">{{ news.direction or '—' }}</div></div>
+      <div class="detail-item"><div class="detail-label">Action Status</div><div class="detail-value">{{ news.action_status or '—' }}</div></div>
+      <div class="detail-item"><div class="detail-label">Relevant</div><div class="detail-value">{{ news.relevant if news.relevant is not none else '—' }}</div></div>
+    </div>
+  </div>
+</div>
+
+{% if news.rationale %}
+<div class="section">
+  <div class="section-header"><span class="section-title">Rationale</span></div>
+  <div class="section-body"><div class="text-block">{{ news.rationale }}</div></div>
+</div>
+{% endif %}
+
+{% if news.evidence %}
+<div class="section">
+  <div class="section-header"><span class="section-title">Evidence</span></div>
+  <div class="section-body">
+    {% for ev in news.evidence %}
+    <div class="evidence-item">"{{ ev.text }}" <span style="color:var(--text-dim);font-size:10px">({{ ev.start }}–{{ ev.end }})</span></div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="section">
+  <div class="section-header"><span class="section-title">Document Text</span></div>
+  <div class="section-body"><div class="text-block">{{ news.text }}</div></div>
+</div>
+
+<div class="section">
+  <div class="section-header"><span class="section-title">Metadata</span></div>
+  <div class="section-body">
+    <div class="meta-list">
+      <div class="meta-row"><span class="meta-key">External ID</span><span class="meta-value">{{ news.external_id }}</span></div>
+      <div class="meta-row"><span class="meta-key">Correlation ID</span><span class="meta-value">{{ news.correlation_id }}</span></div>
+      <div class="meta-row"><span class="meta-key">Fetch Path</span><span class="meta-value">{{ news.fetch_path }}</span></div>
+      {% for key, value in news.source_metadata.items() %}
+      <div class="meta-row"><span class="meta-key">{{ key }}</span><span class="meta-value">{{ value }}</span></div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -31,8 +31,9 @@
 .health-last { font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-left: auto; margin-right: 8px; }
 .col-gap { display: flex; flex-direction: column; gap: 16px; }
 .news-head { display: grid; grid-template-columns: 100px 1fr 84px 72px 68px 90px; padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--surface-2); }
-.news-row { display: grid; grid-template-columns: 100px 1fr 84px 72px 68px 90px; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12px; }
+.news-row { display: grid; grid-template-columns: 100px 1fr 84px 72px 68px 90px; gap: 10px; padding: 10px 16px; border-bottom: 1px solid var(--border); align-items: center; font-size: 12px; text-decoration: none; color: inherit; transition: background .12s; }
 .news-row:last-child { border-bottom: none; }
+.news-row:hover { background: var(--surface-2); }
 .news-title { min-width: 0; }
 .news-title-main { color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; }
 .news-title-sub { color: var(--text-muted); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-family: var(--font-mono); }
@@ -97,13 +98,13 @@
       <div class="th">Source</div>
       <div class="th">Title / Classification</div>
       <div class="th">Retrieved</div>
-      <div class="th">Rating</div>
+      <div class="th">Score / Level</div>
       <div class="th">Ticker</div>
       <div class="th">Status</div>
     </div>
     {% if news %}
     {% for item in news %}
-    <div class="news-row">
+    <a href="/ui/news/{{ item.id }}" class="news-row">
       <div class="news-cell">
         {{ item.source_name }}
         <div style="font-size:10px;color:var(--text-dim)">{{ item.source_tier|upper|replace('_',' ') }}</div>
@@ -138,7 +139,7 @@
       <div>
         <span class="news-pill {{ item.processing_status }}">{{ item.processing_status|upper }}</span>
       </div>
-    </div>
+    </a>
     {% endfor %}
     {% else %}
     <div class="empty-state">No retrieved documents yet.</div>
