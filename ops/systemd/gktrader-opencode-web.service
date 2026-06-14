@@ -1,0 +1,18 @@
+[Unit]
+Description=gktrader opencode web UI
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/gktrader
+Environment=HOME=%h
+Environment=XDG_CONFIG_HOME=%h/.config
+Environment=PATH=%h/.opencode/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+EnvironmentFile=%h/.config/gktrader/opencode-web.env
+ExecStart=%h/gktrader/ops/systemd/start-gktrader-opencode-web.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=default.target
