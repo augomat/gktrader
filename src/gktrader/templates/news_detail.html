@@ -28,6 +28,7 @@
 .detail-value { color: var(--text); word-break: break-word; }
 .detail-value.mono { font-family: var(--font-mono); font-size: 12px; }
 .text-block { white-space: pre-wrap; font-size: 13px; line-height: 1.7; color: var(--text); }
+.text-note { margin-bottom: 10px; font-size: 12px; color: var(--review); }
 .evidence-item { background: var(--surface-2); border: 1px solid var(--border-muted); border-left: 3px solid var(--watch); border-radius: 4px; padding: 10px 12px; margin-bottom: 8px; font-size: 12px; font-family: var(--font-mono); color: var(--text-muted); line-height: 1.55; }
 .evidence-item:last-child { margin-bottom: 0; }
 .meta-list { display: flex; flex-direction: column; gap: 8px; }
@@ -146,7 +147,12 @@
 
 <div class="section">
   <div class="section-header"><span class="section-title">Document Text</span></div>
-  <div class="section-body"><div class="text-block">{{ news.text }}</div></div>
+  <div class="section-body">
+    {% if news.text_truncated %}
+    <div class="text-note">Stored fallback capture is truncated for this Truth Social post. Future fetches now preserve the full line, and this page will use it when available.</div>
+    {% endif %}
+    <div class="text-block">{{ news.text }}</div>
+  </div>
 </div>
 
 <div class="section">

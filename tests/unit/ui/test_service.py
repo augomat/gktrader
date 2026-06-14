@@ -281,3 +281,69 @@ def test_get_news_detail_returns_linked_signal_and_alert() -> None:
     assert detail["source_url"] == "https://example.com/news/2"
     assert detail["source_metadata"] == {"region": "us"}
     assert detail["evidence"][0]["text"] == "Rigetti receives strategic funding."
+
+
+def test_get_news_detail_prefers_full_text_from_metadata() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        raw = RawDocument(
+            id=_id(),
+            correlation_id="corr-3",
+            source_name="truthsocial",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="index_fallback",
+            external_id="ts-pw-2",
+            canonical_url="https://truthsocial.com/",
+            title="Congratulations to Jim Dolan and the New York Knicks!!! What a year it has been…",
+            text="Congratulations to Jim Dolan and the New York Knicks!!! What a year it has been…",
+            content_hash="hash-3",
+            published_at=None,
+            detected_at=_dt(14),
+            source_metadata={
+                "playwright_line": 2,
+                "normalized_line": (
+                    "Congratulations to Jim Dolan and the New York Knicks!!! What a year it has "
+                    "been and there is much more to come in the future."
+                ),
+            },
+        )
+        db.add(raw)
+        db.commit()
+
+        detail = UIService(db).get_news_detail(raw.id)
+
+    assert detail is not None
+    assert detail["text"].endswith("there is much more to come in the future.")
+    assert detail["text_truncated"] is False
+
+
+def test_get_news_detail_flags_unrecoverable_truncated_truthsocial_text() -> None:
+    engine = create_engine("sqlite+pysqlite:///:memory:", future=True)
+    Base.metadata.create_all(engine)
+
+    with Session(engine) as db:
+        raw = RawDocument(
+            id=_id(),
+            correlation_id="corr-4",
+            source_name="truthsocial",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="index_fallback",
+            external_id="ts-pw-3",
+            canonical_url="https://truthsocial.com/",
+            title="Truncated post…",
+            text="Truncated post…",
+            content_hash="hash-4",
+            published_at=None,
+            detected_at=_dt(15),
+            source_metadata={"playwright_line": 1},
+        )
+        db.add(raw)
+        db.commit()
+
+        detail = UIService(db).get_news_detail(raw.id)
+
+    assert detail is not None
+    assert detail["text"] == "Truncated post…"
+    assert detail["text_truncated"] is True

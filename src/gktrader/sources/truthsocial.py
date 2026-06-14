@@ -277,6 +277,12 @@ class TruthSocialAdapter(SourceAdapter):
         )
 
     def _normalize_from_index(self, item: SourceIndexItem) -> NormalizedDocument:
+        metadata = dict(item.metadata)
+        full_text = (
+            metadata.get("normalized_line")
+            or metadata.get("raw_line")
+            or item.title
+        )
         return NormalizedDocument(
             source_name=self.source_name,
             source_tier=self.source_tier,
@@ -284,11 +290,11 @@ class TruthSocialAdapter(SourceAdapter):
             external_id=item.external_id,
             canonical_url=item.detail_url,
             title=item.title,
-            text=item.title,
+            text=full_text,
             published_at=item.published_at,
             updated_at=item.updated_at,
             detected_at=datetime.now(timezone.utc),
-            source_metadata=dict(item.metadata),
+            source_metadata=metadata,
         )
 
     def normalize_cnn_mirror_post(self, post: dict) -> NormalizedDocument:

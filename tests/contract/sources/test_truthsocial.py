@@ -169,6 +169,20 @@ class TestPlaywrightParsing:
         assert "Pinned Truth" not in items_first[0].title
         assert "16h" not in items_first[0].title
 
+    def test_index_fallback_normalize_keeps_full_playwright_text(self, adapter: TruthSocialAdapter) -> None:
+        raw = (
+            "Donald J. Trump @realDonaldTrump · 7h Congratulations to Jim Dolan and the New York "
+            "Knicks!!! What a year it has been and there is much more to come in the future."
+        )
+
+        item = adapter._parse_text_listing(raw)[0]
+        doc = adapter.normalize(item)
+
+        assert doc.fetch_path == "index_fallback"
+        assert "What a year it has been" in doc.text
+        assert len(doc.text) > len(doc.title)
+        assert doc.source_metadata["normalized_line"] == doc.text
+
 
 # ---------------------------------------------------------------------------
 # Changed-version handling

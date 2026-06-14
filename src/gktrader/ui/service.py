@@ -51,6 +51,15 @@ class UIService:
             return resolve_truthsocial_source_url(canonical_url, doc.source_metadata)
         return canonical_url
 
+    def _resolve_full_document_text(self, doc: RawDocument) -> str:
+        text = doc.text or ""
+        metadata = doc.source_metadata or {}
+
+        stored_full_text = metadata.get("normalized_line") or metadata.get("raw_line")
+        if isinstance(stored_full_text, str) and len(stored_full_text) > len(text):
+            return stored_full_text
+        return text
+
     def _news_context(self, doc: RawDocument) -> dict:
         processing = self.db.scalar(
             select(ProcessingRun)
@@ -229,9 +238,16 @@ class UIService:
         signal = context["signal"]
         alert = context["alert"]
         parsed = context["parsed"]
+        resolved_text = self._resolve_full_document_text(doc)
 
         row.update({
-            "text": doc.text,
+            "text": resolved_text,
+            "text_truncated": bool(
+                doc.text.endswith("…")
+                and resolved_text == doc.text
+                and doc.source_name == "truthsocial"
+                and doc.fetch_path == "index_fallback"
+            ),
             "fetch_path": doc.fetch_path,
             "external_id": doc.external_id,
             "correlation_id": doc.correlation_id,

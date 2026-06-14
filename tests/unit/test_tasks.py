@@ -59,6 +59,7 @@ from gktrader.intelligence.classifier import ClassificationRun
 from gktrader.intelligence.prompts import get_prompt_info
 from gktrader.intelligence.resolver import CompanyAlias, SecCompanyRecord, TickerResolver
 from gktrader.sources.base import SourceAdapter
+from gktrader.sources.truthsocial import TruthSocialAdapter
 from gktrader.tasks.pipeline import AlertResult, PipelineResult, SignalPipeline, SignalResult
 
 
@@ -236,6 +237,27 @@ class _MockSourceAdapter(SourceAdapter):
         return str(raw_item)
 
 
+class _FakeTruthSocialRepairAdapter(TruthSocialAdapter):
+    source_name: str = "truthsocial"
+    source_tier: SourceTier = SourceTier.TIER_1
+
+    def __init__(self, mirror_posts: list[dict[str, Any]]):
+        super().__init__(client=None)  # type: ignore[arg-type]
+        self._mirror_items = self._parse_cnn_mirror({"data": mirror_posts})
+
+    def fetch_index(
+        self, cursor: str | None = None, conditional_headers: dict[str, str] | None = None,
+    ) -> FetchIndexResult:
+        return FetchIndexResult(items=[], fetch_path="direct_api")
+
+    def _fetch_cnn_mirror(
+        self,
+        cursor: str | None = None,
+        conditional_headers: dict[str, str] | None = None,
+    ) -> FetchIndexResult:
+        return FetchIndexResult(items=self._mirror_items, fetch_path="cnn_mirror")
+
+
 def _make_mock_doc(
     source_name: str = "mock_source",
     external_id: str = "mock-001",
@@ -366,6 +388,64 @@ class TestIngestSources:
         results2 = pipeline_later.ingest_sources()
         db_session.commit()
         assert results2[0].new_documents == 0
+
+    def test_ingest_backfills_truncated_truthsocial_index_fallback_text(self, db_session, resolver):
+        raw = RawDocument(
+            id=_db_uuid(),
+            correlation_id="corr-ts-1",
+            source_name="truthsocial",
+            source_tier=SourceTier.TIER_1,
+            fetch_path="index_fallback",
+            external_id="ts-pw-legacy-1",
+            canonical_url="https://truthsocial.com/",
+            title=(
+                "Donald J. Trump @realDonaldTrump · 7h Congratulations to Jim Dolan and the "
+                "New York Knicks!!! What a year it has been…"
+            ),
+            text=(
+                "Donald J. Trump @realDonaldTrump · 7h Congratulations to Jim Dolan and the "
+                "New York Knicks!!! What a year it has been…"
+            ),
+            content_hash="hash-ts-1",
+            detected_at=_now(),
+            source_metadata={"playwright_line": 2},
+        )
+        db_session.add(raw)
+        db_session.commit()
+
+        mirror_posts = [{
+            "id": "116746575777210117",
+            "text": (
+                "Congratulations to Jim Dolan and the New York Knicks!!! What a year it has been "
+                "but, even more so, what incredible playoff wins we have all witnessed, especially "
+                "the last four - Maybe the greatest in the history of basketball. Also, tonight, a "
+                "superstar was born. His name is Jalen Brunson."
+            ),
+            "url": "https://truthsocial.com/@realDonaldTrump/posts/116746575777210117",
+            "created_at": "2026-06-14T12:00:00.000Z",
+        }]
+        adapter = _FakeTruthSocialRepairAdapter(mirror_posts)
+        pipeline = SignalPipeline(
+            db_session=db_session,
+            settings=_make_settings(),
+            adapters={"truthsocial": adapter},
+            resolver=resolver,
+            classify_fn=lambda t, x, m: _make_classifier_result(),
+            snapshot_fn=lambda t: _make_market_snapshot(t),
+            deliver_fn=lambda s, c, p: DeliveryStatus.SENT,
+            continue_deliver_fn=lambda s, c, m: [DeliveryStatus.SENT],
+            now_fn=_now,
+        )
+
+        results = pipeline.ingest_sources(["truthsocial"])
+        db_session.commit()
+
+        repaired = db_session.get(RawDocument, raw.id)
+        assert results[0].status == PollRunStatus.SUCCEEDED
+        assert repaired is not None
+        assert repaired.text.startswith("Congratulations to Jim Dolan and the New York Knicks!!!")
+        assert repaired.source_metadata["backfilled_from"] == "cnn_mirror"
+        assert repaired.source_metadata["original_id"] == "116746575777210117"
 
         stored = db_session.query(RawDocument).all()
         assert len(stored) == 1

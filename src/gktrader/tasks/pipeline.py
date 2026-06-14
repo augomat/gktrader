@@ -65,7 +65,12 @@ from gktrader.intelligence.scoring import ScoreContext, compute_actionability
 from gktrader.marketdata.downgrade import apply_market_downgrade
 from gktrader.reporting.paper import make_paper_entry
 from gktrader.sources.base import SourceAdapter
-from gktrader.sources.truthsocial import resolve_truthsocial_source_url
+from gktrader.sources.truthsocial import (
+    TruthSocialAdapter,
+    _normalize_playwright_line,
+    _truncate_title,
+    resolve_truthsocial_source_url,
+)
 from gktrader.intelligence.prompts import compute_prompt_hash, get_prompt_info
 
 
@@ -276,6 +281,124 @@ class SignalPipeline:
         self._continue_deliver = continue_deliver_fn or send_continuation_messages
         self._now = now_fn
 
+    def _repair_truthsocial_index_fallback_document(
+        self,
+        existing: RawDocument,
+        normalized_text: str,
+        source_metadata: dict[str, Any],
+    ) -> bool:
+        if existing.fetch_path != "index_fallback":
+            return False
+        if len(normalized_text) <= len(existing.text or "") and not existing.text.endswith("…"):
+            return False
+
+        new_content_hash = _hash_text(normalized_text)
+        duplicate = (
+            self.db.query(RawDocument)
+            .filter_by(
+                source_name=existing.source_name,
+                external_id=existing.external_id,
+                content_hash=new_content_hash,
+            )
+            .first()
+        )
+        if duplicate is not None and duplicate.id != existing.id:
+            return False
+
+        metadata = dict(existing.source_metadata or {})
+        metadata.update({
+            "normalized_line": normalized_text,
+            "backfilled_from": source_metadata.get("source", source_metadata.get("backfilled_from", "truthsocial")),
+        })
+        if source_metadata.get("original_id"):
+            metadata["original_id"] = source_metadata["original_id"]
+        if source_metadata.get("mirror_timestamp"):
+            metadata["mirror_timestamp"] = source_metadata["mirror_timestamp"]
+
+        existing.title = _truncate_title(normalized_text)
+        existing.text = normalized_text
+        existing.content_hash = new_content_hash
+        existing.source_metadata = metadata
+        self.db.flush()
+        return True
+
+    def _repair_truthsocial_truncated_documents(
+        self,
+        adapter: SourceAdapter,
+        items: list[Any],
+    ) -> None:
+        if not isinstance(adapter, TruthSocialAdapter):
+            return
+
+        for item in items:
+            try:
+                raw = adapter.fetch_detail(item)
+                doc = adapter.normalize(raw)
+            except Exception:
+                continue
+
+            normalized_text = _normalize_playwright_line(doc.text)
+            if not normalized_text:
+                continue
+
+            playwright_external_id = (
+                "ts-pw-" + hashlib.sha256(normalized_text.encode("utf-8")).hexdigest()[:16]
+            )
+            existing_docs = (
+                self.db.query(RawDocument)
+                .filter_by(
+                    source_name="truthsocial",
+                    external_id=playwright_external_id,
+                    fetch_path="index_fallback",
+                )
+                .all()
+            )
+            if not existing_docs:
+                candidates = (
+                    self.db.query(RawDocument)
+                    .filter(
+                        RawDocument.source_name == "truthsocial",
+                        RawDocument.fetch_path == "index_fallback",
+                        RawDocument.text.like("%…"),
+                    )
+                    .all()
+                )
+                existing_docs = [
+                    existing
+                    for existing in candidates
+                    if normalized_text.startswith(
+                        _normalize_playwright_line((existing.text or "").removesuffix("…"))
+                    )
+                ]
+            for existing in existing_docs:
+                self._repair_truthsocial_index_fallback_document(
+                    existing,
+                    normalized_text,
+                    doc.source_metadata,
+                )
+
+    def _backfill_truthsocial_from_cnn_mirror(self, adapter: SourceAdapter) -> None:
+        if not isinstance(adapter, TruthSocialAdapter):
+            return
+
+        has_truncated_docs = (
+            self.db.query(RawDocument)
+            .filter(
+                RawDocument.source_name == "truthsocial",
+                RawDocument.fetch_path == "index_fallback",
+                RawDocument.text.like("%…"),
+            )
+            .first()
+        )
+        if has_truncated_docs is None:
+            return
+
+        try:
+            mirror_result = adapter._fetch_cnn_mirror()
+        except Exception:
+            return
+        self._repair_truthsocial_truncated_documents(adapter, mirror_result.items)
+
     # ------------------------------------------------------------------
     # Source ingestion stage
     # ------------------------------------------------------------------
@@ -347,6 +470,9 @@ class SignalPipeline:
                 )
                 fetch_path = index_result.fetch_path
                 result.items_fetched = len(index_result.items)
+                if name == "truthsocial":
+                    self._repair_truthsocial_truncated_documents(adapter, index_result.items)
+                    self._backfill_truthsocial_from_cnn_mirror(adapter)
 
                 # Process each item
                 new_count = 0
