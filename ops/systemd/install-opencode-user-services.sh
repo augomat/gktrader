@@ -16,7 +16,7 @@ if [[ ! -f "${SECRET_FILE}" ]]; then
   printf 'Opencode web password: %s\n' "${PASSWORD}"
 fi
 
-install -m 0644 "${SCRIPT_DIR}/gktrader-opencode-web.service" "${UNIT_DIR}/gktrader-opencode-web.service"
+install -m 0644 "${SCRIPT_DIR}/opencode-web.service" "${UNIT_DIR}/opencode-web.service"
 
 if systemctl --user list-unit-files | grep -q '^gktrader-opencode-tailscale-serve.service'; then
   systemctl --user disable --now gktrader-opencode-tailscale-serve.service || true
@@ -24,7 +24,7 @@ if systemctl --user list-unit-files | grep -q '^gktrader-opencode-tailscale-serv
 fi
 
 systemctl --user daemon-reload
-systemctl --user enable --now gktrader-opencode-web.service
+systemctl --user enable --now opencode-web.service
 
 DNS_NAME="$(tailscale status --json | jq -r '.Self.DNSName')"
 DNS_NAME="${DNS_NAME%.}"

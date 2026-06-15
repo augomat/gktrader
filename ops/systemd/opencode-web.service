@@ -1,5 +1,5 @@
 [Unit]
-Description=gktrader opencode web UI
+Description=opencode web UI
 After=network-online.target
 Wants=network-online.target
 
