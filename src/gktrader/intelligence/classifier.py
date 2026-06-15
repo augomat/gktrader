@@ -150,6 +150,7 @@ class OpenRouterClassifier:
                     )
                     fallback_body = dict(request_body)
                     fallback_body["model"] = self._config.fallback_model
+                    fallback_body.pop("response_format", None)
                     try:
                         fb_resp = await self._client.post(self._config.api_url, json=fallback_body)
                         fb_resp.raise_for_status()

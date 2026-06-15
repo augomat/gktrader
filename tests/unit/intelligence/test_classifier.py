@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 
+import httpx
 import pytest
 from pydantic import ValidationError
 
@@ -218,6 +220,64 @@ class TestClassifierConfigDefaults:
 
 class TestClassifierInvalidResponse:
     """Tests for classifier response handling."""
+
+    def test_fallback_request_drops_response_format(self, monkeypatch) -> None:
+        primary_req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+        fallback_req = httpx.Request("POST", "https://openrouter.ai/api/v1/chat/completions")
+        calls: list[dict] = []
+        json_mod = json
+
+        class _FakeClient:
+            async def post(self, url, **kwargs):
+                body = kwargs.get("json")
+                calls.append(body or {})
+                if len(calls) == 1:
+                    resp = httpx.Response(404, request=primary_req, text="not found")
+                    resp.raise_for_status()
+                payload = {
+                    "choices": [
+                        {
+                            "message": {
+                                "content": json_mod.dumps({
+                                    "relevant": True,
+                                    "event_type": "government_funding",
+                                    "direction": "bullish",
+                                    "strength": 4,
+                                    "confidence": 0.9,
+                                    "companies": [{"name": "Test Corp"}],
+                                    "rationale": "ok",
+                                    "risks": [],
+                                    "action_status": "announced",
+                                    "monetary_amounts": [],
+                                    "award_or_contract_ids": [],
+                                    "government_actors": [],
+                                    "evidence": [{"text": "ok", "start_offset": 0, "end_offset": 2}],
+                                })
+                            }
+                        }
+                    ],
+                    "usage": {"prompt_tokens": 1, "completion_tokens": 1},
+                }
+                return httpx.Response(200, request=fallback_req, content=json_mod.dumps(payload).encode())
+
+            async def aclose(self):
+                return None
+
+        monkeypatch.setattr("gktrader.intelligence.classifier.httpx.AsyncClient", lambda *args, **kwargs: _FakeClient())
+
+        async def _run():
+            classifier = OpenRouterClassifier(ClassifierConfig(api_key="test"))
+            try:
+                return await classifier.classify("NIST", "test body")
+            finally:
+                await classifier.close()
+
+        run = asyncio.run(_run())
+        assert run.status == ProcessingStatus.SUCCEEDED
+        assert run.model == DEFAULT_OPENROUTER_FALLBACK_MODEL
+        assert "response_format" in calls[0]
+        assert "response_format" not in calls[1]
+        assert calls[0]["model"] != calls[1]["model"]
 
     def test_validate_response_markdown_fence(self) -> None:
         """_validate_response should strip markdown code fences."""
