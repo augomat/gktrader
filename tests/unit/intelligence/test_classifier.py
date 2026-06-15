@@ -9,7 +9,8 @@ from pydantic import ValidationError
 
 from gktrader.domain.contracts import ClassifierResult
 from gktrader.domain.enums import ProcessingStatus
-from gktrader.intelligence.classifier import OpenRouterClassifier, _estimate_cost
+from gktrader.config.settings import DEFAULT_OPENROUTER_FALLBACK_MODEL
+from gktrader.intelligence.classifier import ClassifierConfig, OpenRouterClassifier, _estimate_cost
 
 
 class TestClassifierResultValidation:
@@ -207,6 +208,12 @@ class TestCostEstimation:
     def test_estimate_cost_no_usage(self) -> None:
         cost = _estimate_cost({}, "google/gemini-2.0-flash-lite")
         assert cost is None
+
+
+class TestClassifierConfigDefaults:
+    def test_default_fallback_model_is_deepseek(self) -> None:
+        config = ClassifierConfig(api_key="test")
+        assert config.fallback_model == DEFAULT_OPENROUTER_FALLBACK_MODEL
 
 
 class TestClassifierInvalidResponse:

@@ -6,6 +6,9 @@ from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+DEFAULT_OPENROUTER_FALLBACK_MODEL = "deepseek/deepseek-v4-flash"
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_prefix="GKTRADER_", extra="ignore")
 
@@ -14,7 +17,7 @@ class Settings(BaseSettings):
     redis_url: str = "redis://localhost:6379/0"
     openrouter_api_key: str = ""
     openrouter_model: str = "google/gemini-3.1-flash-lite"
-    openrouter_fallback_model: str = "google/gemini-2.5-flash-lite"
+    openrouter_fallback_model: str = DEFAULT_OPENROUTER_FALLBACK_MODEL
     telegram_bot_token: str = ""
     telegram_owner_id: int = 0
     internal_api_shared_secret: str = "dev-secret"
@@ -41,11 +44,27 @@ class Settings(BaseSettings):
     )
     gkfetch_url: str = Field(
         default="",
-        description="Base URL of the CM4 gkfetch service (e.g. http://100.88.46.68:8899). Empty disables remote-browser Playwright tier.",
+        description="Legacy default gkfetch base URL. Prefer GKTRADER_GKFETCH_CM4_URL and GKTRADER_GKFETCH_GEORG_LAPTOP_URL.",
     )
     gkfetch_secret: str = Field(
         default="",
         description="Shared secret for the CM4 gkfetch service (X-Secret header).",
+    )
+    gkfetch_cm4_url: str = Field(
+        default="",
+        description="CM4 gkfetch base URL. Falls back to GKTRADER_GKFETCH_URL when empty.",
+    )
+    gkfetch_cm4_secret: str = Field(
+        default="",
+        description="CM4 gkfetch shared secret. Falls back to GKTRADER_GKFETCH_SECRET when empty.",
+    )
+    gkfetch_georg_laptop_url: str = Field(
+        default="",
+        description="Georg Windows laptop gkfetch base URL. Required for Commerce browser fallback.",
+    )
+    gkfetch_georg_laptop_secret: str = Field(
+        default="",
+        description="Georg Windows laptop gkfetch shared secret for Commerce browser fallback.",
     )
 
 

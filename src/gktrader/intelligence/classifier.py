@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import json
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -12,6 +13,7 @@ from pydantic import ValidationError
 
 from gktrader.domain.contracts import ClassifierResult
 from gktrader.domain.enums import ProcessingStatus
+from gktrader.config.settings import DEFAULT_OPENROUTER_FALLBACK_MODEL
 from gktrader.intelligence.prompts import compute_prompt_hash, get_classifier_system_prompt
 
 logger = logging.getLogger(__name__)
@@ -54,7 +56,7 @@ class ClassifierConfig:
     api_key: str
     api_url: str = OPENROUTER_API_URL
     model: str = DEFAULT_MODEL
-    fallback_model: str = "google/gemini-2.5-flash-lite"
+    fallback_model: str = DEFAULT_OPENROUTER_FALLBACK_MODEL
     timeout_seconds: float = 60.0
     max_retries: int = 1
 
@@ -235,8 +237,6 @@ class OpenRouterClassifier:
                 cleaned = cleaned[: cleaned.rfind("```")].strip()
 
         try:
-            import json
-
             parsed = json.loads(cleaned)
             return ClassifierResult.model_validate(parsed)
         except (json.JSONDecodeError, ValidationError, ValueError, TypeError) as exc:
