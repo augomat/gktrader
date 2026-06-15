@@ -360,7 +360,7 @@ def test_get_alert_detail_chart_includes_all_stock_events_for_selected_range(mon
 
     def fake_fetch_chart_bars(self, ticker: str, *, start, end, timeframe):  # noqa: ANN001
         assert ticker == "RGTI"
-        assert timeframe == "1Day"
+        assert timeframe == "1Hour"
         return bars
 
     monkeypatch.setattr(UIService, "_fetch_chart_bars", fake_fetch_chart_bars)
@@ -520,9 +520,9 @@ def test_get_alert_detail_chart_includes_all_stock_events_for_selected_range(mon
     chart = detail["chart"]
     assert chart["available"] is True
     assert chart["selected_range"] == "1M"
-    assert chart["visible_event_count"] == 3
+    assert chart["visible_event_count"] == 2
     assert chart["total_event_count"] == 3
-    assert any(event["is_focus"] for event in chart["event_lines"])
+    assert all(not event["is_focus"] for event in chart["event_lines"])
     assert any(event["news_id"] == older_doc.id for event in chart["event_lines"])
     assert chart["points_attr"]
 

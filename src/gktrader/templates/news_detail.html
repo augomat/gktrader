@@ -45,7 +45,7 @@
 .chart-svg-wrap { border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: rgba(13,17,23,.9); }
 .chart-svg { width: 100%; height: 240px; display: block; }
 .chart-grid { stroke: rgba(139,148,158,.16); stroke-width: 1; }
-.chart-path { fill: none; stroke: var(--watch); stroke-width: 2.25; stroke-linecap: round; stroke-linejoin: round; }
+.chart-path { fill: none; stroke: var(--watch); stroke-width: 1.2; stroke-linecap: round; stroke-linejoin: round; }
 .chart-event-line { stroke-width: 1; opacity: .7; }
 .chart-event-line.tradeable { stroke: var(--tradeable); }
 .chart-event-line.review { stroke: var(--review); }
@@ -54,6 +54,12 @@
 .chart-event-line.ignore { stroke: var(--ignore); }
 .chart-event-line.focus { stroke: #f0f6fc; stroke-width: 2.5; stroke-dasharray: 5 4; opacity: 1; }
 .chart-axis { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; font-family: var(--font-mono); font-size: 11px; color: var(--text-dim); }
+.chart-yaxis-label { font-family: var(--font-mono); font-size: 10px; fill: var(--text-dim); }
+.chart-yaxis-label.left { text-anchor: start; }
+.chart-yaxis-label.right { text-anchor: end; }
+.chart-yaxis-line { stroke: rgba(139,148,158,.1); stroke-width: 0.5; }
+.chart-day-line { stroke: rgba(139,148,158,.22); stroke-width: 1.25; stroke-dasharray: 3 5; }
+.chart-now-triangle { fill: rgba(240,246,252,.85); stroke: rgba(240,246,252,.85); stroke-width: 1; }
 .chart-note, .chart-empty { margin-top: 10px; font-size: 12px; color: var(--text-muted); }
 .meta-list { display: flex; flex-direction: column; gap: 8px; }
 .meta-row { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; font-family: var(--font-mono); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
@@ -67,6 +73,11 @@
   .header-meta { text-align: left; }
   .chart-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+.chart-tooltip { position: absolute; display: none; background: var(--surface); border: 1px solid var(--border-muted); border-radius: 6px; padding: 8px 10px; font-family: var(--font-mono); font-size: 11px; color: var(--text); pointer-events: none; z-index: 200; box-shadow: 0 4px 12px rgba(0,0,0,.4); white-space: nowrap; }
+.chart-tooltip .tt-price { font-size: 13px; font-weight: 600; }
+.chart-tooltip .tt-chg .positive { color: var(--tradeable); }
+.chart-tooltip .tt-chg .negative { color: var(--bearish); }
+.chart-svg-wrap { position: relative; }
 {% endblock %}
 
 {% block content %}
@@ -80,6 +91,7 @@
         <span class="source-name">{{ news.source_name }}</span>
         <span class="tier-badge {% if news.source_tier == 'tier_1' %}t1{% else %}t2{% endif %}">{{ news.source_tier|upper|replace('_', ' ') }}</span>
         <span class="news-pill {{ news.processing_status }}">{{ news.processing_status|upper }}</span>
+        {% if news.processing_error %}<span style="font-size:11px;color:var(--bearish);margin-left:4px;">{{ news.processing_error }}</span>{% endif %}
         {% if news.alert_level %}<span class="badge {{ level_css.get(news.alert_level|upper, 'ignore') }}">{{ news.alert_level|replace('_', ' ') }}</span>{% endif %}
       </div>
       <div class="news-title">{{ news.title }}</div>
@@ -179,10 +191,19 @@
       </div>
       <div class="chart-svg-wrap">
         <svg viewBox="0 0 {{ news.chart.width }} {{ news.chart.height }}" preserveAspectRatio="none" class="chart-svg" role="img" aria-label="{{ news.ticker }} price chart">
-          <line x1="0" y1="0" x2="{{ news.chart.width }}" y2="0" class="chart-grid"></line>
-          <line x1="0" y1="73.33" x2="{{ news.chart.width }}" y2="73.33" class="chart-grid"></line>
-          <line x1="0" y1="146.66" x2="{{ news.chart.width }}" y2="146.66" class="chart-grid"></line>
-          <line x1="0" y1="{{ news.chart.height }}" x2="{{ news.chart.width }}" y2="{{ news.chart.height }}" class="chart-grid"></line>
+          {% for gy in news.chart.grid_y_values %}
+          <line x1="0" y1="{{ gy }}" x2="{{ news.chart.width }}" y2="{{ gy }}" class="chart-grid"></line>
+          {% endfor %}
+          {% for axis in news.chart.y_axis_left %}
+          <text x="5" y="{{ axis.y + 3 }}" class="chart-yaxis-label left">{{ axis.label }}</text>
+          {% endfor %}
+          {% for axis in news.chart.y_axis_right %}
+          <text x="{{ news.chart.width - 5 }}" y="{{ axis.y + 3 }}" class="chart-yaxis-label right">{{ axis.label }}</text>
+          <line x1="{{ news.chart.width - 20 }}" y1="{{ axis.y }}" x2="{{ news.chart.width }}" y2="{{ axis.y }}" class="chart-yaxis-line"></line>
+          {% endfor %}
+          {% for dl in news.chart.day_lines %}
+          <line x1="{{ dl.x }}" y1="0" x2="{{ dl.x }}" y2="{{ news.chart.height }}" class="chart-day-line"></line>
+          {% endfor %}
           {% for ev in news.chart.event_lines %}
           <a href="{{ ev.detail_url or '#' }}">
             <line x1="{{ ev.x }}" y1="0" x2="{{ ev.x }}" y2="{{ news.chart.height }}" class="chart-event-line {{ level_css.get(ev.level|upper, 'ignore') }}">
@@ -191,6 +212,9 @@
           </a>
           {% endfor %}
           <polyline points="{{ news.chart.points_attr }}" class="chart-path"></polyline>
+          {% if news.chart.now_visible and news.chart.now_x is not none %}
+          <polygon points="{{ news.chart.now_x - 6 }},1 {{ news.chart.now_x + 6 }},1 {{ news.chart.now_x }},9" class="chart-now-triangle"><title>Now</title></polygon>
+          {% endif %}
           {% if news.chart.focus_visible and news.chart.focus_x is not none %}
           <line x1="{{ news.chart.focus_x }}" y1="0" x2="{{ news.chart.focus_x }}" y2="{{ news.chart.height }}" class="chart-event-line focus">
             <title>Current news hit · {{ news.chart.focus_at.strftime('%Y-%m-%d %H:%M UTC') if news.chart.focus_at else '—' }}</title>
@@ -252,4 +276,49 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+{% if news.chart and news.chart.available %}
+<script>
+(function() {
+  const chartWrap = document.querySelector('.chart-svg-wrap');
+  const svg = chartWrap.querySelector('.chart-svg');
+  const bars = {{ news.chart.bar_points_json | safe }};
+  const firstClose = {{ news.chart.first_close }};
+  if (!bars.length) return;
+  const tt = document.createElement('div');
+  tt.className = 'chart-tooltip';
+  tt.innerHTML = '<div class="tt-price"></div><div style="color:var(--text-dim)"><span class="tt-time"></span></div><div class="tt-chg"></div>';
+  chartWrap.appendChild(tt);
+  function findBar(mx) {
+    let lo = 0, hi = bars.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (bars[mid].x <= mx) lo = mid; else hi = mid - 1;
+    }
+    if (lo < bars.length - 1 && Math.abs(bars[lo + 1].x - mx) < Math.abs(bars[lo].x - mx)) lo++;
+    return bars[lo];
+  }
+  svg.addEventListener('mousemove', function(e) {
+    const rect = svg.getBoundingClientRect();
+    const mx = ((e.clientX - rect.left) / rect.width) * {{ news.chart.width }};
+    const bar = findBar(mx);
+    const chg = ((bar.close - firstClose) / firstClose) * 100;
+    const cls = chg >= 0 ? 'positive' : 'negative';
+    const sign = chg >= 0 ? '+' : '';
+    tt.querySelector('.tt-price').textContent = '$' + bar.close.toFixed(2);
+    tt.querySelector('.tt-time').textContent = bar.ts.replace('T', ' ').slice(0, 19) + ' UTC';
+    tt.querySelector('.tt-chg').innerHTML = (firstClose ? '<span class="' + cls + '">' + sign + chg.toFixed(2) + '% from start</span>' : '');
+    tt.style.display = 'block';
+    const wrapRect = chartWrap.getBoundingClientRect();
+    let left = (bar.x / {{ news.chart.width }}) * wrapRect.width + 10;
+    if (left + tt.offsetWidth > wrapRect.width) left = wrapRect.width - tt.offsetWidth - 10;
+    tt.style.left = left + 'px';
+    tt.style.top = '8px';
+  });
+  svg.addEventListener('mouseleave', function() { tt.style.display = 'none'; });
+})();
+</script>
+{% endif %}
 {% endblock %}

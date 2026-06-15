@@ -1,7 +1,9 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+import json
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from sqlalchemy import and_, desc, func, select
 from sqlalchemy.orm import Session
@@ -30,11 +32,11 @@ from gktrader.sources.truthsocial import resolve_truthsocial_source_url
 
 _DEFAULT_CHART_RANGE = "1W"
 _CHART_RANGES = {
-    "1W": {"label": "1W", "days": 7, "timeframe": "1Hour"},
-    "1M": {"label": "1M", "days": 30, "timeframe": "1Day"},
-    "3M": {"label": "3M", "days": 90, "timeframe": "1Day"},
-    "6M": {"label": "6M", "days": 180, "timeframe": "1Day"},
-    "1Y": {"label": "1Y", "days": 365, "timeframe": "1Day"},
+    "1W": {"label": "1W", "days": 7, "timeframe": "5Min"},
+    "1M": {"label": "1M", "days": 30, "timeframe": "1Hour"},
+    "3M": {"label": "3M", "days": 90, "timeframe": "1Hour"},
+    "6M": {"label": "6M", "days": 180, "timeframe": "1Hour"},
+    "1Y": {"label": "1Y", "days": 365, "timeframe": "1Hour"},
 }
 
 
@@ -281,7 +283,6 @@ class UIService:
 
         width = 760.0
         height = 220.0
-        total_seconds = max((end - start).total_seconds(), 1.0)
 
         lows = [bar.get("low") for bar in bars if bar.get("low") is not None]
         highs = [bar.get("high") for bar in bars if bar.get("high") is not None]
@@ -294,32 +295,48 @@ class UIService:
         chart_max = max_price + padding
         chart_span = max(chart_max - chart_min, 1e-6)
 
-        def to_x(at: datetime) -> float:
-            return round((((at - start).total_seconds()) / total_seconds) * width, 2)
-
         def to_y(price: float) -> float:
             return round(height - (((price - chart_min) / chart_span) * height), 2)
 
-        points: list[str] = []
+        # Index-based x: each bar gets equal spacing, no time gaps
+        n_bars = len(bars)
         bar_points: list[dict[str, Any]] = []
-        for bar in bars:
-            timestamp = bar["timestamp"]
+        points: list[str] = []
+        bar_timestamps: list[datetime] = []
+        for i, bar in enumerate(bars):
+            ts = bar["timestamp"]
             close = float(bar["close"])
-            x = to_x(timestamp)
+            x = round((i / max(n_bars - 1, 1)) * width, 2) if n_bars > 1 else width / 2
             y = to_y(close)
             points.append(f"{x},{y}")
-            bar_points.append({
-                "x": x,
-                "y": y,
-                "close": close,
-                "timestamp": timestamp,
-            })
+            bar_points.append({"x": x, "y": y, "close": close, "timestamp": ts})
+            bar_timestamps.append(ts)
+
+        def _bar_index_for(dt: datetime) -> int:
+            """Binary search for the bar index closest in time to *dt*."""
+            lo, hi = 0, n_bars - 1
+            while lo < hi:
+                mid = (lo + hi + 1) // 2
+                if bar_timestamps[mid] <= dt:
+                    lo = mid
+                else:
+                    hi = mid - 1
+            if lo < n_bars - 1 and abs((bar_timestamps[lo + 1] - dt).total_seconds()) < abs(
+                (bar_timestamps[lo] - dt).total_seconds()
+            ):
+                lo += 1
+            return lo
+
+        def _x_for_time(dt: datetime) -> float:
+            return bar_points[_bar_index_for(dt)]["x"]
 
         marker_lines: list[dict[str, Any]] = []
         for event in visible_events:
+            if event["is_focus"]:
+                continue
             marker_lines.append({
                 **event,
-                "x": to_x(event["occurred_at"]),
+                "x": _x_for_time(event["occurred_at"]),
             })
 
         start_close = bar_points[0]["close"]
@@ -327,6 +344,36 @@ class UIService:
         move_pct = None
         if start_close:
             move_pct = ((end_close - start_close) / start_close) * 100.0
+
+        def price_at_y(y: float) -> float:
+            return chart_max - (y / height) * chart_span
+
+        grid_y_values = [0.0, round(height * 1 / 3, 2), round(height * 2 / 3, 2), height]
+        y_axis_left: list[dict[str, Any]] = []
+        y_axis_right: list[dict[str, Any]] = []
+        for gy in grid_y_values:
+            p = price_at_y(gy)
+            y_axis_left.append({"y": gy, "label": f"${p:,.2f}"})
+            if start_close:
+                rp = ((p - start_close) / start_close) * 100.0
+                sign = "+" if rp > 0 else ""
+                y_axis_right.append({"y": gy, "label": f"{sign}{rp:.1f}%"})
+            else:
+                y_axis_right.append({"y": gy, "label": "—"})
+
+        # Day lines: first bar of each calendar day
+        us_eastern = ZoneInfo("America/New_York")
+        seen_days: set[str] = set()
+        day_lines: list[dict[str, Any]] = []
+        for i, ts in enumerate(bar_timestamps):
+            day_key = ts.astimezone(us_eastern).strftime("%Y-%m-%d")
+            if day_key not in seen_days:
+                seen_days.add(day_key)
+                day_lines.append({"x": bar_points[i]["x"]})
+
+        now = datetime.now(tz=UTC)
+        now_visible = start <= now <= end
+        now_x = _x_for_time(now) if now_visible else None
 
         focus_dt = _as_utc(focus_at)
         focus_visible = bool(focus_dt and start <= focus_dt <= end)
@@ -337,9 +384,18 @@ class UIService:
             "end_at": end,
             "focus_at": focus_dt,
             "focus_visible": focus_visible,
-            "focus_x": to_x(focus_dt) if focus_visible and focus_dt else None,
+            "focus_x": _x_for_time(focus_dt) if focus_visible and focus_dt else None,
             "points": bar_points,
             "points_attr": " ".join(points),
+            "bar_points_json": json.dumps([
+                {
+                    "x": bp["x"],
+                    "y": bp["y"],
+                    "close": bp["close"],
+                    "ts": bp["timestamp"].isoformat(),
+                }
+                for bp in bar_points
+            ]),
             "event_lines": marker_lines,
             "visible_event_count": len(marker_lines),
             "total_event_count": total_events,
@@ -353,6 +409,12 @@ class UIService:
             "high_price": max_price,
             "width": width,
             "height": height,
+            "y_axis_left": y_axis_left,
+            "y_axis_right": y_axis_right,
+            "grid_y_values": grid_y_values,
+            "day_lines": day_lines,
+            "now_visible": now_visible,
+            "now_x": now_x,
         })
         return chart
 
@@ -436,6 +498,7 @@ class UIService:
             "retrieved_age": _age(doc.detected_at),
             "published_age": _age(doc.published_at),
             "processing_status": processing.status.value if processing else "pending",
+            "processing_error": processing.error if processing else None,
             "relevant": parsed.get("relevant"),
             "event_type": parsed.get("event_type", ""),
             "direction": parsed.get("direction", ""),
@@ -654,7 +717,7 @@ class UIService:
             } if ms else None,
             "chart": self._build_stock_chart(
                 p.get("ticker", ""),
-                focus_at=alert.created_at or (raw_doc.published_at if raw_doc else None) or (raw_doc.detected_at if raw_doc else None),
+                focus_at=(raw_doc.published_at if raw_doc else None) or (raw_doc.detected_at if raw_doc else None) or alert.created_at,
                 focus_kind="signal",
                 focus_id=event.id,
                 range_key=range_key,
@@ -828,6 +891,7 @@ class UIService:
                 "tokens_in": r.tokens_in,
                 "tokens_out": r.tokens_out,
                 "status": r.status.value,
+                "error": r.error,
                 "model": r.classifier_model or "—",
                 "age": _age(r.created_at),
             })
