@@ -839,6 +839,45 @@ class TestProcessDocuments:
         assert results[0].status == ProcessingStatus.SUCCEEDED
         assert results[0].extracted_event_id is None
 
+    def test_classify_sync_uses_configured_fallback_model(self, monkeypatch):
+        from gktrader.tasks import pipeline as pipeline_module
+
+        settings = _make_settings(
+            openrouter_api_key="test-key",
+            openrouter_model="primary-model",
+            openrouter_fallback_model="fallback-model",
+        )
+
+        captured: dict[str, Any] = {}
+
+        class _DummyClassifier:
+            def __init__(self, config):
+                captured["config"] = config
+
+            async def classify(self, title, text, source_metadata=None):
+                return ClassificationRun(
+                    model=self.config.model,
+                    prompt_version="1.0.0",
+                    prompt_hash="hash",
+                    status=ProcessingStatus.SUCCEEDED,
+                )
+
+            async def close(self):
+                return None
+
+            @property
+            def config(self):
+                return captured["config"]
+
+        monkeypatch.setattr("gktrader.config.settings.get_settings", lambda: settings)
+        monkeypatch.setattr("gktrader.intelligence.classifier.OpenRouterClassifier", _DummyClassifier)
+
+        run = pipeline_module._classify_sync("Title", "Body")
+
+        assert run.status == ProcessingStatus.SUCCEEDED
+        assert captured["config"].model == "primary-model"
+        assert captured["config"].fallback_model == "fallback-model"
+
 
 # ---------------------------------------------------------------------------
 # Tests: Signal creation stage

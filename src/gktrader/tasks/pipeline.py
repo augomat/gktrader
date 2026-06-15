@@ -224,6 +224,7 @@ def _classify_sync(
     config = ClassifierConfig(
         api_key=settings.openrouter_api_key,
         model=settings.openrouter_model,
+        fallback_model=settings.openrouter_fallback_model,
     )
     classifier = OpenRouterClassifier(config)
 
