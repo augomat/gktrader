@@ -94,7 +94,7 @@ class CommerceAdapter(SourceAdapter):
         resp.raise_for_status()
 
         items = self._parse_listing_html(resp.text)
-        self._validate_listing_items(items, fetch_path="http")
+        self._validate_listing_items(items, fetch_path="http", html=resp.text)
         next_cursor = self._extract_next_page(resp.text)
 
         return FetchIndexResult(
@@ -116,7 +116,7 @@ class CommerceAdapter(SourceAdapter):
         html = self._remote_fetch(url)
 
         items = self._parse_listing_html(html)
-        self._validate_listing_items(items, fetch_path="playwright")
+        self._validate_listing_items(items, fetch_path="playwright", html=html)
         next_cursor = self._extract_next_page(html)
 
         return FetchIndexResult(
@@ -141,13 +141,28 @@ class CommerceAdapter(SourceAdapter):
             if "error" in data:
                 msg = f"Commerce: gkfetch error: {data['error']}"
                 raise RuntimeError(msg)
-            return data["html"]
+            html = data["html"]
+            self._raise_if_cloudflare_challenge(
+                html,
+                fetch_path="gkfetch",
+                status=data.get("status"),
+                title=data.get("title"),
+                final_url=data.get("url"),
+            )
+            return html
 
         if self._browser_context:
             page = self._browser_context.new_page()
             try:
                 page.goto(url, wait_until="networkidle")
-                return page.content()
+                html = page.content()
+                self._raise_if_cloudflare_challenge(
+                    html,
+                    fetch_path="local_browser",
+                    title=page.title(),
+                    final_url=page.url,
+                )
+                return html
             finally:
                 page.close()
 
@@ -328,14 +343,61 @@ class CommerceAdapter(SourceAdapter):
         items: list[SourceIndexItem],
         *,
         fetch_path: str,
+        html: str | None = None,
     ) -> None:
         if items:
             # Record acquisition path so detail fetch can use the same fallback
             for item in items:
                 item.metadata["listing_fetch_path"] = fetch_path
             return
+        if html:
+            self._raise_if_cloudflare_challenge(html, fetch_path=fetch_path)
         msg = f"Commerce {fetch_path} fetch returned HTML with 0 press-release links"
+        diagnostics = self._html_diagnostics(html)
+        if diagnostics:
+            msg += f" ({diagnostics})"
         raise RuntimeError(msg)
+
+    def _raise_if_cloudflare_challenge(
+        self,
+        html: str,
+        *,
+        fetch_path: str,
+        status: int | str | None = None,
+        title: str | None = None,
+        final_url: str | None = None,
+    ) -> None:
+        soup = BeautifulSoup(html, "html.parser")
+        page_title = title or (soup.title.string.strip() if soup.title and soup.title.string else "")
+        text = soup.get_text(" ", strip=True)
+        challenge_markers = (
+            "just a moment" in page_title.casefold()
+            or "performing security verification" in text.casefold()
+            or "/cdn-cgi/challenge-platform/" in html
+        )
+        if not challenge_markers:
+            return
+
+        details = [f"Commerce {fetch_path} fetch returned Cloudflare challenge"]
+        if status is not None:
+            details.append(f"status={status}")
+        if page_title:
+            details.append(f"title={page_title!r}")
+        if final_url:
+            details.append(f"url={final_url}")
+        raise RuntimeError("; ".join(details))
+
+    def _html_diagnostics(self, html: str | None) -> str:
+        if not html:
+            return ""
+        soup = BeautifulSoup(html, "html.parser")
+        title = soup.title.string.strip() if soup.title and soup.title.string else ""
+        if title:
+            return f"title={title!r}"
+        h1 = soup.find("h1")
+        if h1:
+            return f"h1={h1.get_text(strip=True)!r}"
+        return ""
 
     def _extract_next_page(self, html: str) -> str | None:
         """Extract the next page cursor from pagination links."""

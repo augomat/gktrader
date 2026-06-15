@@ -383,6 +383,38 @@ class TestFetchValidation:
         with pytest.raises(RuntimeError, match="0 press-release links"):
             adapter.fetch_index()
 
+    def test_cloudflare_challenge_reports_gkfetch_status_and_title(
+        self,
+        adapter: CommerceAdapter,
+    ) -> None:
+        html = """
+        <html>
+          <head><title>Just a moment...</title></head>
+          <body>www.commerce.gov Performing security verification</body>
+        </html>
+        """
+
+        with pytest.raises(
+            RuntimeError,
+            match="Cloudflare challenge.*status=403.*title='Just a moment\\.\\.\\.'.*url=https://www.commerce.gov/news/press-releases",
+        ):
+            adapter._raise_if_cloudflare_challenge(
+                html,
+                fetch_path="gkfetch",
+                status=403,
+                title="Just a moment...",
+                final_url="https://www.commerce.gov/news/press-releases",
+            )
+
+    def test_zero_link_error_includes_page_diagnostics(
+        self,
+        adapter: CommerceAdapter,
+    ) -> None:
+        html = "<html><head><title>No releases here</title></head><body></body></html>"
+
+        with pytest.raises(RuntimeError, match="0 press-release links.*No releases here"):
+            adapter._validate_listing_items([], fetch_path="playwright", html=html)
+
 
 # ---------------------------------------------------------------------------
 # Adapter metadata

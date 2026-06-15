@@ -1333,6 +1333,55 @@ class TestResolverWiring:
         self._reset_cache()
 
 
+class TestGkfetchEndpointSelection:
+    def test_cm4_endpoint_uses_explicit_cm4_config(self):
+        from gktrader.tasks import jobs
+
+        settings = Settings(
+            gkfetch_url="http://legacy:8899",
+            gkfetch_secret="legacy-secret",
+            gkfetch_cm4_url="http://cm4:8899",
+            gkfetch_cm4_secret="cm4-secret",
+        )
+
+        assert jobs._cm4_gkfetch_config(settings) == ("http://cm4:8899", "cm4-secret")
+
+    def test_cm4_endpoint_falls_back_to_legacy_global_config(self):
+        from gktrader.tasks import jobs
+
+        settings = Settings(
+            gkfetch_url="http://legacy:8899",
+            gkfetch_secret="legacy-secret",
+        )
+
+        assert jobs._cm4_gkfetch_config(settings) == ("http://legacy:8899", "legacy-secret")
+
+    def test_commerce_prefers_georg_laptop_endpoint(self):
+        from gktrader.tasks import jobs
+
+        settings = Settings(
+            gkfetch_cm4_url="http://cm4:8899",
+            gkfetch_cm4_secret="cm4-secret",
+            gkfetch_georg_laptop_url="http://georg:8899",
+            gkfetch_georg_laptop_secret="georg-secret",
+        )
+
+        assert jobs._commerce_gkfetch_config(settings) == (
+            "http://georg:8899",
+            "georg-secret",
+        )
+
+    def test_commerce_georg_endpoint_does_not_fallback_to_cm4(self):
+        from gktrader.tasks import jobs
+
+        settings = Settings(
+            gkfetch_cm4_url="http://cm4:8899",
+            gkfetch_cm4_secret="cm4-secret",
+        )
+
+        assert jobs._commerce_gkfetch_config(settings) == ("", "")
+
+
 # ---------------------------------------------------------------------------
 # Tests: Alert level gating
 # ---------------------------------------------------------------------------

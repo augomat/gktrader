@@ -109,17 +109,19 @@ def _build_pipeline() -> SignalPipeline:
     """Build a production SignalPipeline instance with real adapters."""
     settings = get_settings()
     db = SessionLocal()
+    cm4_gkfetch_url, cm4_gkfetch_secret = _cm4_gkfetch_config(settings)
+    commerce_gkfetch_url, commerce_gkfetch_secret = _commerce_gkfetch_config(settings)
 
     adapters = {
         "whitehouse": WhiteHouseAdapter(),
         "nist": NISTAdapter(),
         "truthsocial": TruthSocialAdapter(
-            gkfetch_url=settings.gkfetch_url,
-            gkfetch_secret=settings.gkfetch_secret,
+            gkfetch_url=cm4_gkfetch_url,
+            gkfetch_secret=cm4_gkfetch_secret,
         ),
         "commerce": CommerceAdapter(
-            gkfetch_url=settings.gkfetch_url,
-            gkfetch_secret=settings.gkfetch_secret,
+            gkfetch_url=commerce_gkfetch_url,
+            gkfetch_secret=commerce_gkfetch_secret,
         ),
         "sec_8k": SECAdapter(),
     }
@@ -131,6 +133,22 @@ def _build_pipeline() -> SignalPipeline:
         settings=settings,
         adapters=adapters,
         resolver=resolver,
+    )
+
+
+def _cm4_gkfetch_config(settings) -> tuple[str, str]:
+    """Return the default remote-browser endpoint used by non-Commerce sources."""
+    return (
+        settings.gkfetch_cm4_url or settings.gkfetch_url,
+        settings.gkfetch_cm4_secret or settings.gkfetch_secret,
+    )
+
+
+def _commerce_gkfetch_config(settings) -> tuple[str, str]:
+    """Commerce only runs through Georg's laptop endpoint."""
+    return (
+        settings.gkfetch_georg_laptop_url,
+        settings.gkfetch_georg_laptop_secret,
     )
 
 
